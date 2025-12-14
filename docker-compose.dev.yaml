@@ -1,0 +1,9 @@
+services:
+    node-backend:
+        build: .
+        container_name: obsidian-backend
+        ports:
+            - "3000:3000"
+        env_file:
+            - .env.docker.local
+        restart: unless-stopped

@@ -25,3 +25,7 @@ dist-ssr
 
 # Environment
 *.env
+.env*
+
+# ignore files
+.dockerignore

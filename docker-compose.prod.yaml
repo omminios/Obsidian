@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: obsidian-backend-prod
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.docker.prod
+    restart: always
+    environment:
+      - NODE_ENV=production

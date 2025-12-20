@@ -5,5 +5,5 @@ services:
         ports:
             - "3000:3000"
         env_file:
-            - .env.docker.local
+            - env.docker.local
         restart: unless-stopped

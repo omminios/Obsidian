@@ -65,8 +65,8 @@ CREATE TABLE accounts (
 
 CREATE TABLE group_memberships (
     id SERIAL PRIMARY KEY,
-    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     group_id INT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role VARCHAR(20) NOT NULL, -- creator or member
     joined_group_at NOT NULL TIMESTAMP DEFAULT NOW(),
     departed_at TIMESTAMP,
@@ -141,4 +141,45 @@ CREATE TABLE password_reset_tokens (
 -- Indexs
 -- ============================================================================
 
-CREATE INDEX idx_
+-- account indexes
+
+CREATE INDEX idx_account_users on account (user_id),
+CREATE INDEX idx_account_is_active on accounts (user_id, is_active) WHERE is_active = 'true';
+
+
+
+-- transactions
+
+CREATE INDEX idx_transaction_users on transactions (user_id),
+CREATE INDEX idx_transaction_dates on transactions (user_id, transacion_date DESC),
+CREATE INDEX idx_transactions_date ON transactions(transaction_date);
+
+-- group memberships
+
+CREATE INDEX idx_membership_users on group_memberships (user_id),
+CREATE INDEX idx_membership_groups on group_memberships (group_id),
+CREATE INDEX idx_membership_active_users on group_memberships (user_id) WHERE departed_at IS NULL
+
+-- account visibility
+
+CREATE INDEX idx_group_visibility_group on account_group_visibility (group_id)
+CREATE INDEX idx_group_visibility_account on account_group_visibility (account_id)
+
+-- account members
+
+CREATE INDEX idx_account_members_account ON account_members(account_id);
+CREATE INDEX idx_account_members_user ON account_members(user_id);
+
+-- account transactions
+
+CREATE INDEX idx_acct_txn_transaction ON account_transactions(transaction_id);
+CREATE INDEX idx_acct_txn_account ON account_transactions(account_id);
+
+--invitation
+
+CREATE INDEX idx_invitations_inviter ON invitations(inviter_user_id);
+CREATE INDEX idx_invitations_pending ON invitations(inviter_user_id) WHERE status = 'pending';
+
+-- passwords
+
+CREATE INDEX idx_reset_tokens_user ON password_reset_tokens(user_id);

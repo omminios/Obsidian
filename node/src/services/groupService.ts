@@ -1,13 +1,40 @@
-import { getAllGroups } from "../repository/groupRepository";
+import {
+	getAllGroups,
+	findByID,
+	newGroup,
+	deleteGroup
+} from "../repository/groupRepository";
+import { TablesInsert } from "../config/types.js";
 
-export const groupformat = async (_req, res, next) => {
+export const getGroups = async () => {
 	try {
-		console.log("connecting business logic");
 		const groups = await getAllGroups();
-		console.log(groups.id);
-		console.log(groups.name);
-		next();
 		return groups;
+	} catch (e) {
+		console.error(e);
+	}
+};
+
+export const getGroupID = async (ID: number) => {
+	try {
+		const group = await findByID(ID);
+		return group;
+	} catch (e) {
+		console.error(e);
+	}
+};
+
+export const createGroup = async (
+	groupData: TablesInsert<"groups">
+) => {
+	const group = await newGroup(groupData);
+	return group;
+};
+
+export const removeGroup = async (ID: number) => {
+	try {
+		const group = await deleteGroup(ID);
+		return group;
 	} catch (e) {
 		console.error(e);
 	}

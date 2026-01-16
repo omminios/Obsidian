@@ -1,6 +1,7 @@
 import { getAllusers, newUser } from "../repository/userRepository";
 import { findByID } from "../repository/userRepository";
 import { TablesInsert } from "../config/types";
+import { deleteprofile } from "../repository/userRepository";
 
 export const getUsers = async () => {
 	try {
@@ -27,4 +28,9 @@ export const getUserID = async (ID: number) => {
 export const createUser = async (newUserdata: TablesInsert<"users">) => {
 	const userData = await newUser(newUserdata);
 	return userData;
+};
+
+export const removeUser = async (id: number) => {
+	const deletedUser = await deleteprofile(id);
+	return deletedUser;
 };

@@ -5,6 +5,8 @@ type User = Tables<"users">;
 
 type userSensitive = Omit<User, "password_hash">;
 
+type userSummary = Pick<User, "id" | "username" | "first_name" | "last_name">;
+
 export const findByID = async (
 	userId: number
 ): Promise<userSensitive | undefined> => {
@@ -15,12 +17,15 @@ export const findByID = async (
 	return res.rows[0];
 };
 
-export const getAllusers = async () => {
+export const getAllusers = async (): Promise<userSensitive[]> => {
 	try {
-		const res = await pool.query("SELECT * FROM users");
+		const res = await pool.query(
+			"SELECT id, email, username, first_name, last_name, created_at, updated_at FROM users"
+		);
 		return res.rows;
 	} catch (e) {
 		console.error(e);
+		return [];
 	}
 };
 
@@ -39,6 +44,20 @@ export const newUser = async (
 				userData.first_name,
 				userData.last_name,
 			]
+		);
+		return res.rows[0];
+	} catch (e) {
+		console.error(e);
+	}
+};
+
+export const deleteprofile = async (
+	deleteUser: number
+): Promise<userSummary | undefined> => {
+	try {
+		const res = await pool.query(
+			"DELETE FROM USERS WHERE ID = $1 RETURNING id, username, first_name, last_name",
+			[deleteUser]
 		);
 		return res.rows[0];
 	} catch (e) {

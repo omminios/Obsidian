@@ -1,13 +1,40 @@
-import { getAlltransactions } from "../repository/transactionRepository";
+import {
+	getAlltransactions,
+	findByID,
+	newTransaction,
+	deleteTransaction,
+} from "../repository/transactionRepository";
+import { TablesInsert } from "../config/types.js";
 
-export const transactionformat = async (_req, res, next) => {
+export const getTransactions = async () => {
 	try {
-		console.log("connecting business logic");
 		const transactions = await getAlltransactions();
-		console.log(transactions.id);
-		console.log(transactions.user_id);
-		next();
 		return transactions;
+	} catch (e) {
+		console.error(e);
+	}
+};
+
+export const getTransactionID = async (ID: number) => {
+	try {
+		const transaction = await findByID(ID);
+		return transaction;
+	} catch (e) {
+		console.error(e);
+	}
+};
+
+export const createTransaction = async (
+	transactionData: TablesInsert<"transactions">
+) => {
+	const transaction = await newTransaction(transactionData);
+	return transaction;
+};
+
+export const removeTransaction = async (ID: number) => {
+	try {
+		const transaction = await deleteTransaction(ID);
+		return transaction;
 	} catch (e) {
 		console.error(e);
 	}

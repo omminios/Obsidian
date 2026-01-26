@@ -27,27 +27,13 @@ router.get("/", async (_req, res) => {
 
 // Get user by ID
 router.get("/:id", async (req, res) => {
-	try {
-		const payload = req.params.id;
-		const ID = Number(payload);
-
-		if (isNaN(ID)) {
-			return res.status(400).json({
-				error: "Invalid user ID. Must be a valid number.",
-			});
-		}
-
-		const data = await getUserID(ID);
-		res.status(200).json({
-			message: "Data received successfully",
-			data: data,
-		});
-	} catch (e) {
-		console.error(e);
-		res.status(500).json({
-			error: "Request failed.",
-		});
-	}
+	const payload = req.params.id;
+	const ID = Number(payload);
+	const data = await getUserID(ID);
+	res.status(200).json({
+		message: "Data received successfully",
+		data: data,
+	});
 });
 
 // Create new user

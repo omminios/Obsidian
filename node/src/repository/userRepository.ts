@@ -1,3 +1,4 @@
+import { DatabaseError } from "../errors/index.js";
 import { pool } from "../config/database.js";
 import { Tables, TablesInsert } from "../config/types.js";
 
@@ -10,11 +11,16 @@ type userSummary = Pick<User, "id" | "username" | "first_name" | "last_name">;
 export const findByID = async (
 	userId: number
 ): Promise<userSensitive | undefined> => {
-	const res = await pool.query(
-		"SELECT id, email, username, first_name, last_name, created_at, updated_at FROM users WHERE id = $1",
-		[userId]
-	);
-	return res.rows[0];
+	try {
+		const res = await pool.query(
+			"SELECT id, email, username, first_name, last_name, created_at, updated_at FROM users WHERE id = $1",
+			[userId]
+		);
+		return res.rows[0];
+	} catch (e) {
+		console.error(e);
+		throw new DatabaseError("Failed to fetch user", { userId });
+	}
 };
 
 export const getAllusers = async (): Promise<userSensitive[]> => {

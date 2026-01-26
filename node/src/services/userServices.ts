@@ -1,30 +1,27 @@
-import { getAllusers, newUser } from "../repository/userRepository";
-import { findByID } from "../repository/userRepository";
-import { TablesInsert } from "../config/types";
-import { deleteprofile } from "../repository/userRepository";
+import {
+	getAllusers,
+	newUser,
+	findByID,
+	deleteprofile,
+} from "../repository/userRepository.js";
+import { TablesInsert } from "../config/types.js";
+import { NotFoundError } from "../errors/index.js";
 
 export const getUsers = async () => {
-	try {
-		console.log("retreiving data from repository");
-		const users = await getAllusers();
-		console.log(users);
-		return users;
-	} catch (e) {
-		console.error(e);
-	}
+	const users = await getAllusers();
+	return users;
 };
 
 export const getUserID = async (ID: number) => {
-	try {
-		const users = await findByID(ID);
-		return users;
-	} catch (e) {
-		console.error(e);
+	const user = await findByID(ID);
+	if (!user) {
+		throw new NotFoundError("User", String(ID));
 	}
+	return user;
 };
 
-//Id will automatically be created, as well as the initial creation date and updated date.
-// need to add a function to hash the password in between inserting a new row of data.
+// Id will automatically be created, as well as the initial creation date and updated date.
+// TODO: add a function to hash the password before inserting.
 export const createUser = async (newUserdata: TablesInsert<"users">) => {
 	const userData = await newUser(newUserdata);
 	return userData;
@@ -32,5 +29,8 @@ export const createUser = async (newUserdata: TablesInsert<"users">) => {
 
 export const removeUser = async (id: number) => {
 	const deletedUser = await deleteprofile(id);
+	if (!deletedUser) {
+		throw new NotFoundError("User", String(id));
+	}
 	return deletedUser;
 };

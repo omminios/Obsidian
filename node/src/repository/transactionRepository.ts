@@ -1,5 +1,11 @@
+import {
+	ConflictError,
+	DatabaseError,
+	ValidationError,
+} from "../errors/index.js";
 import { pool } from "../config/database.js";
 import { Tables, TablesInsert } from "../config/types.js";
+import { isPostgresError } from "../utils/utils.js";
 
 type Transaction = Tables<"transactions">;
 
@@ -8,23 +14,32 @@ export const getAlltransactions = async (): Promise<Transaction[]> => {
 		const res = await pool.query("SELECT * FROM transactions");
 		return res.rows;
 	} catch (e) {
-		console.error(e);
-		return [];
+		throw new DatabaseError("Failed to fetch transactions", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
 	}
 };
 
 export const findByID = async (
 	transactionId: number
 ): Promise<Transaction | undefined> => {
-	const res = await pool.query("SELECT * FROM transactions WHERE id = $1", [
-		transactionId,
-	]);
-	return res.rows[0];
+	try {
+		const res = await pool.query(
+			"SELECT * FROM transactions WHERE id = $1",
+			[transactionId]
+		);
+		return res.rows[0];
+	} catch (e) {
+		throw new DatabaseError("Failed to fetch transaction", {
+			transactionId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
 };
 
 export const newTransaction = async (
 	transactionData: TablesInsert<"transactions">
-): Promise<Transaction | undefined> => {
+): Promise<Transaction> => {
 	try {
 		const res = await pool.query(
 			`INSERT INTO transactions (user_id, transaction_date, amount, description, category, merchant_name, plaid_id)
@@ -42,7 +57,22 @@ export const newTransaction = async (
 		);
 		return res.rows[0];
 	} catch (e) {
-		console.error(e);
+		if (isPostgresError(e)) {
+			if (e.code === "23502") {
+				throw new ValidationError("Required field is missing", {
+					column: e.column,
+				});
+			}
+			if (e.code === "23503") {
+				throw new ConflictError("Referenced user does not exist", {
+					constraint: e.constraint,
+					detail: e.details,
+				});
+			}
+		}
+		throw new DatabaseError("Failed to create transaction", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
 	}
 };
 
@@ -51,13 +81,14 @@ export const deleteTransaction = async (
 ): Promise<Transaction | undefined> => {
 	try {
 		const result = await pool.query(
-			`DELETE FROM transactions
-			WHERE id = $1
-			RETURNING *`,
+			`DELETE FROM transactions WHERE id = $1 RETURNING *`,
 			[transactionId]
 		);
 		return result.rows[0];
 	} catch (e) {
-		console.error(e);
+		throw new DatabaseError("Failed to delete transaction", {
+			transactionId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
 	}
 };

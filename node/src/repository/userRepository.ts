@@ -1,6 +1,11 @@
-import { DatabaseError } from "../errors/index.js";
+import {
+	DatabaseError,
+	ConflictError,
+	ValidationError,
+} from "../errors/index.js";
 import { pool } from "../config/database.js";
 import { Tables, TablesInsert } from "../config/types.js";
+import { isPostgresError } from "../utils/utils.js";
 
 type User = Tables<"users">;
 
@@ -18,8 +23,10 @@ export const findByID = async (
 		);
 		return res.rows[0];
 	} catch (e) {
-		console.error(e);
-		throw new DatabaseError("Failed to fetch user", { userId });
+		throw new DatabaseError("Failed to fetch user", {
+			userId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
 	}
 };
 
@@ -30,17 +37,18 @@ export const getAllusers = async (): Promise<userSensitive[]> => {
 		);
 		return res.rows;
 	} catch (e) {
-		console.error(e);
-		return [];
+		throw new DatabaseError("Failed to fetch users", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
 	}
 };
 
 export const newUser = async (
 	userData: TablesInsert<"users">
-): Promise<userSensitive | undefined> => {
+): Promise<userSensitive> => {
 	try {
 		const res = await pool.query(
-			`INSERT INTO users (email, username, password_hash, first_name, last_name) 
+			`INSERT INTO users (email, username, password_hash, first_name, last_name)
 			VALUES($1, $2, $3, $4, $5)
 			RETURNING id, email, username, first_name, last_name, created_at, updated_at`,
 			[
@@ -53,7 +61,22 @@ export const newUser = async (
 		);
 		return res.rows[0];
 	} catch (e) {
-		console.error(e);
+		if (isPostgresError(e)) {
+			if (e.code === "23505") {
+				throw new ConflictError("Email or username already exists", {
+					constraint: e.constraint,
+					detail: e.details,
+				});
+			}
+			if (e.code === "23502") {
+				throw new ValidationError("Required field is missing", {
+					column: e.column,
+				});
+			}
+		}
+		throw new DatabaseError("Failed to create user", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
 	}
 };
 
@@ -67,6 +90,9 @@ export const deleteprofile = async (
 		);
 		return res.rows[0];
 	} catch (e) {
-		console.error(e);
+		throw new DatabaseError("Deletion of user failed", {
+			deleteUser,
+			cause: e instanceof Error ? e.message : String(e),
+		});
 	}
 };

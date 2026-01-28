@@ -3,25 +3,21 @@ import {
 	findByID,
 	newTransaction,
 	deleteTransaction,
-} from "../repository/transactionRepository";
+} from "../repository/transactionRepository.js";
 import { TablesInsert } from "../config/types.js";
+import { NotFoundError } from "../errors/index.js";
 
 export const getTransactions = async () => {
-	try {
-		const transactions = await getAlltransactions();
-		return transactions;
-	} catch (e) {
-		console.error(e);
-	}
+	const transactions = await getAlltransactions();
+	return transactions;
 };
 
-export const getTransactionID = async (ID: number) => {
-	try {
-		const transaction = await findByID(ID);
-		return transaction;
-	} catch (e) {
-		console.error(e);
+export const getTransactionID = async (id: number) => {
+	const transaction = await findByID(id);
+	if (!transaction) {
+		throw new NotFoundError("Transaction", String(id));
 	}
+	return transaction;
 };
 
 export const createTransaction = async (
@@ -31,11 +27,10 @@ export const createTransaction = async (
 	return transaction;
 };
 
-export const removeTransaction = async (ID: number) => {
-	try {
-		const transaction = await deleteTransaction(ID);
-		return transaction;
-	} catch (e) {
-		console.error(e);
+export const removeTransaction = async (id: number) => {
+	const transaction = await deleteTransaction(id);
+	if (!transaction) {
+		throw new NotFoundError("Transaction", String(id));
 	}
+	return transaction;
 };

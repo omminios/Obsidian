@@ -6,3 +6,4 @@ export { default as NotFoundError } from "./notFoundError.js";
 export { default as ConflictError } from "./conflictError.js";
 export { default as DatabaseError } from "./databaseError.js";
 export { default as ExternalServiceError } from "./externalServiceError.js";
+export { default as PostgresError } from "../../../node_modules/@supabase/postgrest-js/src/PostgrestError.js";

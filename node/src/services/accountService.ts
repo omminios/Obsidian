@@ -2,27 +2,23 @@ import {
 	getAllAccounts,
 	findByID,
 	newAccount,
-	deleteAccount,
-} from "../repository/accountRepository";
+	deactivateAccount,
+} from "../repository/accountRepository.js";
 import { TablesInsert } from "../config/types.js";
-import { getAccountTransactions } from "../repository/composite/accountTransactions";
+import { getAccountTransactions } from "../repository/composite/accountTransactions.js";
+import { NotFoundError } from "../errors/index.js";
 
 export const getAccounts = async () => {
-	try {
-		const accounts = await getAllAccounts();
-		return accounts;
-	} catch (e) {
-		console.error(e);
-	}
+	const accounts = await getAllAccounts();
+	return accounts;
 };
 
-export const getAccountID = async (ID: number) => {
-	try {
-		const account = await findByID(ID);
-		return account;
-	} catch (e) {
-		console.error(e);
+export const getAccountID = async (id: number) => {
+	const account = await findByID(id);
+	if (!account) {
+		throw new NotFoundError("Account", String(id));
 	}
+	return account;
 };
 
 export const createAccount = async (accountData: TablesInsert<"accounts">) => {
@@ -30,21 +26,15 @@ export const createAccount = async (accountData: TablesInsert<"accounts">) => {
 	return account;
 };
 
-export const removeAccount = async (ID: number) => {
-	try {
-		const account = await deleteAccount(ID);
-		return account;
-	} catch (e) {
-		console.error(e);
+export const removeAccount = async (id: number) => {
+	const account = await deactivateAccount(id);
+	if (!account) {
+		throw new NotFoundError("Account", String(id));
 	}
+	return account;
 };
 
-export const getMostRecentTransactions = async (ID: number) => {
-	try {
-		const account = await getAccountTransactions(ID);
-		console.log(account);
-		return account;
-	} catch (e) {
-		console.error(e);
-	}
+export const getMostRecentTransactions = async (id: number) => {
+	const transactions = await getAccountTransactions(id);
+	return transactions;
 };

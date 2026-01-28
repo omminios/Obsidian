@@ -4,91 +4,85 @@ import {
 	getGroupID,
 	createGroup,
 	removeGroup,
+	leaveGroup,
 } from "../../services/groupService.js";
+import { ValidationError } from "../../errors/index.js";
 
 const router = Router();
 
 // Get all groups
 router.get("/", async (_req, res) => {
-	try {
-		const data = await getGroups();
-		res.status(200).json({
-			message: "Data received successfully",
-			data: data,
-		});
-	} catch (e) {
-		console.error(e);
-		res.status(500).json({
-			error: "Request failed.",
-		});
-	}
+	const data = await getGroups();
+	res.status(200).json({
+		message: "Data received successfully",
+		data,
+	});
 });
 
 // Get group by ID
 router.get("/:id", async (req, res) => {
-	try {
-		const payload = req.params.id;
-		const ID = Number(payload);
+	const id = Number(req.params.id);
 
-		if (isNaN(ID)) {
-			return res.status(400).json({
-				error: "Invalid group ID. Must be a valid number.",
-			});
-		}
-
-		const data = await getGroupID(ID);
-		res.status(200).json({
-			message: "Data received successfully",
-			data: data,
-		});
-	} catch (e) {
-		console.error(e);
-		res.status(500).json({
-			error: "Request failed.",
-		});
+	if (isNaN(id)) {
+		throw new ValidationError("Invalid group ID", { field: "id", received: req.params.id });
 	}
+
+	const data = await getGroupID(id);
+	res.status(200).json({
+		message: "Data received successfully",
+		data,
+	});
 });
 
 // Create new group
 router.post("/", async (req, res) => {
-	try {
-		const request_body = req.body;
-		const newGroup = await createGroup(request_body);
-		res.status(201).json({
-			message: "New Group created",
-			group: newGroup,
-		});
-	} catch (e) {
-		console.error(e);
-		res.status(500).json({
-			error: "Creation failed",
-		});
-	}
+	const newGroup = await createGroup(req.body);
+	res.status(201).json({
+		message: "New Group created",
+		group: newGroup,
+	});
 });
 
-// Delete group
+// Delete group (creator only)
 router.delete("/:id", async (req, res) => {
-	try {
-		const request_id = req.params.id;
-		const ID = Number(request_id);
+	const id = Number(req.params.id);
+	// TODO: Get userId from auth middleware (req.user.id)
+	const userId = Number(req.body.userId);
 
-		if (isNaN(ID)) {
-			return res.status(400).json({
-				error: "Invalid group ID. Must be a valid number.",
-			});
-		}
-
-		const deletedData = await removeGroup(ID);
-		res.status(200).json({
-			message: "Group deleted",
-			group: deletedData,
-		});
-	} catch (e) {
-		console.error(e);
-		res.status(500).json({
-			error: "Deletion failed",
-		});
+	if (isNaN(id)) {
+		throw new ValidationError("Invalid group ID", { field: "id", received: req.params.id });
 	}
+
+	if (isNaN(userId)) {
+		throw new ValidationError("User ID required", { field: "userId" });
+	}
+
+	const deletedData = await removeGroup(id, userId);
+	res.status(200).json({
+		message: "Group deleted",
+		group: deletedData,
+	});
+});
+
+// Leave group (members only, not creator)
+router.post("/:id/leave", async (req, res) => {
+	const groupId = Number(req.params.id);
+	// TODO: Get userId from auth middleware (req.user.id)
+	const userId = Number(req.body.userId);
+
+	if (isNaN(groupId)) {
+		throw new ValidationError("Invalid group ID", { field: "id", received: req.params.id });
+	}
+
+	if (isNaN(userId)) {
+		throw new ValidationError("User ID required", { field: "userId" });
+	}
+
+	const membership = await leaveGroup(groupId, userId);
+	res.status(200).json({
+		message: "Successfully left the group",
+		membership,
+	});
 });
 
 export default router;

@@ -9,7 +9,7 @@ import { isPostgresError } from "../utils/utils.js";
 
 type Transaction = Tables<"transactions">;
 
-export const getAlltransactions = async (): Promise<Transaction[]> => {
+export const getAllTransactions = async (): Promise<Transaction[]> => {
 	try {
 		const res = await pool.query("SELECT * FROM transactions");
 		return res.rows;
@@ -20,7 +20,7 @@ export const getAlltransactions = async (): Promise<Transaction[]> => {
 	}
 };
 
-export const findByID = async (
+export const findById = async (
 	transactionId: number
 ): Promise<Transaction | undefined> => {
 	try {

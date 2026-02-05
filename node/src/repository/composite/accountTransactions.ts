@@ -1,29 +1,34 @@
+import { DatabaseError } from "../../errors/index.js";
 import { pool } from "../../config/database.js";
 import { Tables } from "../../config/types.js";
 
-type transactions = Tables<"transactions">;
-type account = Tables<"accounts">;
+type Transaction = Tables<"transactions">;
+type Account = Tables<"accounts">;
 
-type TransactionWithAccount = transactions &
-	Pick<account, "account_name" | "institution_name">;
+type TransactionWithAccount = Transaction &
+	Pick<Account, "account_name" | "institution_name">;
 
 export const getAccountTransactions = async (
-	ID: number
+	userId: number,
+	limit = 15,
+	offset = 0
 ): Promise<TransactionWithAccount[]> => {
 	try {
 		const res = await pool.query(
 			`SELECT t.*, a.account_name, a.institution_name
-        FROM transactions t
-        JOIN account_transactions at ON t.id = at.transaction_id
-        JOIN accounts a ON at.account_id = a.id
-        WHERE t.user_id = $1
-        ORDER BY t.transaction_date DESC
-        LIMIT 15 OFFSET 0`,
-			[ID]
+			FROM transactions t
+			JOIN account_transactions at ON t.id = at.transaction_id
+			JOIN accounts a ON at.account_id = a.id
+			WHERE t.user_id = $1
+			ORDER BY t.transaction_date DESC
+			LIMIT $2 OFFSET $3`,
+			[userId, limit, offset]
 		);
 		return res.rows;
 	} catch (e) {
-		console.error(e);
-		return [];
+		throw new DatabaseError("Failed to fetch account transactions", {
+			userId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
 	}
 };

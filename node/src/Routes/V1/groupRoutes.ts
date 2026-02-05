@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
 	getGroups,
-	getGroupID,
+	getGroupById,
 	createGroup,
 	removeGroup,
 	leaveGroup,
@@ -27,7 +27,7 @@ router.get("/:id", async (req, res) => {
 		throw new ValidationError("Invalid group ID", { field: "id", received: req.params.id });
 	}
 
-	const data = await getGroupID(id);
+	const data = await getGroupById(id);
 	res.status(200).json({
 		message: "Data received successfully",
 		data,

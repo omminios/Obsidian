@@ -1,21 +1,21 @@
 import {
-	getAllusers,
+	getAllUsers,
 	newUser,
-	findByID,
-	deleteprofile,
+	findById,
+	deleteProfile,
 } from "../repository/userRepository.js";
 import { TablesInsert } from "../config/types.js";
 import { NotFoundError } from "../errors/index.js";
 
 export const getUsers = async () => {
-	const users = await getAllusers();
+	const users = await getAllUsers();
 	return users;
 };
 
-export const getUserID = async (ID: number) => {
-	const user = await findByID(ID);
+export const getUserById = async (id: number) => {
+	const user = await findById(id);
 	if (!user) {
-		throw new NotFoundError("User", String(ID));
+		throw new NotFoundError("User", String(id));
 	}
 	return user;
 };
@@ -28,7 +28,7 @@ export const createUser = async (newUserdata: TablesInsert<"users">) => {
 };
 
 export const removeUser = async (id: number) => {
-	const deletedUser = await deleteprofile(id);
+	const deletedUser = await deleteProfile(id);
 	if (!deletedUser) {
 		throw new NotFoundError("User", String(id));
 	}

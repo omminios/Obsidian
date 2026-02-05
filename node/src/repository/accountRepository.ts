@@ -19,7 +19,7 @@ export const getAllAccounts = async (): Promise<Account[]> => {
 	}
 };
 
-export const findByID = async (
+export const findById = async (
 	accountId: number
 ): Promise<Account | undefined> => {
 	try {
@@ -87,6 +87,7 @@ export const deactivateAccount = async (
 		);
 		return result.rows[0];
 	} catch (e) {
+		// Need to add authorization errors here
 		throw new DatabaseError("Failed to deactivate account", {
 			accountId,
 			cause: e instanceof Error ? e.message : String(e),
@@ -108,6 +109,7 @@ export const hasAccountAccess = async (
 		);
 		return res.rows.length > 0;
 	} catch (e) {
+		// Need to add authorization errors here
 		throw new DatabaseError("Failed to check account access", {
 			accountId,
 			userId,

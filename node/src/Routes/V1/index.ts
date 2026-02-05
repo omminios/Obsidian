@@ -13,3 +13,5 @@ router.use("/groups", groupRoutes);
 router.use("/accounts", accountRoutes);
 
 export default router;
+
+//Note need to import Zod for schema validation later.

@@ -9,13 +9,13 @@ import { isPostgresError } from "../utils/utils.js";
 
 type User = Tables<"users">;
 
-type userSensitive = Omit<User, "password_hash">;
+type UserSensitive = Omit<User, "password_hash">;
 
-type userSummary = Pick<User, "id" | "username" | "first_name" | "last_name">;
+type UserSummary = Pick<User, "id" | "username" | "first_name" | "last_name">;
 
-export const findByID = async (
+export const findById = async (
 	userId: number
-): Promise<userSensitive | undefined> => {
+): Promise<UserSensitive | undefined> => {
 	try {
 		const res = await pool.query(
 			"SELECT id, email, username, first_name, last_name, created_at, updated_at FROM users WHERE id = $1",
@@ -30,7 +30,7 @@ export const findByID = async (
 	}
 };
 
-export const getAllusers = async (): Promise<userSensitive[]> => {
+export const getAllUsers = async (): Promise<UserSensitive[]> => {
 	try {
 		const res = await pool.query(
 			"SELECT id, email, username, first_name, last_name, created_at, updated_at FROM users"
@@ -45,7 +45,7 @@ export const getAllusers = async (): Promise<userSensitive[]> => {
 
 export const newUser = async (
 	userData: TablesInsert<"users">
-): Promise<userSensitive> => {
+): Promise<UserSensitive> => {
 	try {
 		const res = await pool.query(
 			`INSERT INTO users (email, username, password_hash, first_name, last_name)
@@ -80,9 +80,9 @@ export const newUser = async (
 	}
 };
 
-export const deleteprofile = async (
-	deleteUser: number
-): Promise<userSummary | undefined> => {
+export const deleteProfile = async (
+	userId: number
+): Promise<UserSummary | undefined> => {
 	try {
 		const res = await pool.query(
 			"DELETE FROM USERS WHERE ID = $1 RETURNING id, username, first_name, last_name",
@@ -91,7 +91,7 @@ export const deleteprofile = async (
 		return res.rows[0];
 	} catch (e) {
 		throw new DatabaseError("Deletion of user failed", {
-			deleteUser,
+			userId,
 			cause: e instanceof Error ? e.message : String(e),
 		});
 	}

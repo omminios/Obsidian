@@ -1,24 +1,21 @@
 import {
 	getAllGroups,
-	findByID,
+	findById,
 	newGroup,
-	deleteGroup,
 	getMembership,
 	removeMember,
-	deleteGroupMemberships,
-	deleteGroupVisibility,
-	deleteGroupInvitations,
 } from "../repository/groupRepository.js";
 import { TablesInsert } from "../config/types.js";
 import { NotFoundError, AuthorizationError, ConflictError } from "../errors/index.js";
+import { withTransaction, deleteGroupCascade } from "../utils/transaction.js";
 
 export const getGroups = async () => {
 	const groups = await getAllGroups();
 	return groups;
 };
 
-export const getGroupID = async (id: number) => {
-	const group = await findByID(id);
+export const getGroupById = async (id: number) => {
+	const group = await findById(id);
 	if (!group) {
 		throw new NotFoundError("Group", String(id));
 	}
@@ -32,7 +29,7 @@ export const createGroup = async (groupData: TablesInsert<"groups">) => {
 
 // Only creator can delete - removes all related data
 export const removeGroup = async (groupId: number, requestingUserId: number) => {
-	const group = await findByID(groupId);
+	const group = await findById(groupId);
 	if (!group) {
 		throw new NotFoundError("Group", String(groupId));
 	}
@@ -43,19 +40,17 @@ export const removeGroup = async (groupId: number, requestingUserId: number) => 
 		throw new AuthorizationError("Only the group creator can delete this group");
 	}
 
-	// Delete related data first (cascade)
-	await deleteGroupMemberships(groupId);
-	await deleteGroupVisibility(groupId);
-	await deleteGroupInvitations(groupId);
+	// Delete group and all related data in a transaction
+	await withTransaction(async (client) => {
+		await deleteGroupCascade(client, groupId);
+	});
 
-	// Then delete the group
-	const deletedGroup = await deleteGroup(groupId);
-	return deletedGroup;
+	return group;
 };
 
 // Members can leave (except creator)
 export const leaveGroup = async (groupId: number, userId: number) => {
-	const group = await findByID(groupId);
+	const group = await findById(groupId);
 	if (!group) {
 		throw new NotFoundError("Group", String(groupId));
 	}

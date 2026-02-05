@@ -1,6 +1,6 @@
 import {
 	getAllAccounts,
-	findByID,
+	findById,
 	newAccount,
 	deactivateAccount,
 } from "../repository/accountRepository.js";
@@ -13,8 +13,8 @@ export const getAccounts = async () => {
 	return accounts;
 };
 
-export const getAccountID = async (id: number) => {
-	const account = await findByID(id);
+export const getAccountById = async (id: number) => {
+	const account = await findById(id);
 	if (!account) {
 		throw new NotFoundError("Account", String(id));
 	}
@@ -34,7 +34,11 @@ export const removeAccount = async (id: number) => {
 	return account;
 };
 
-export const getMostRecentTransactions = async (id: number) => {
-	const transactions = await getAccountTransactions(id);
+export const getMostRecentTransactions = async (
+	userId: number,
+	limit = 15,
+	offset = 0
+) => {
+	const transactions = await getAccountTransactions(userId, limit, offset);
 	return transactions;
 };

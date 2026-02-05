@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
 	getAccounts,
-	getAccountID,
+	getAccountById,
 	createAccount,
 	removeAccount,
 } from "../../services/accountService.js";
@@ -21,12 +21,13 @@ router.get("/", async (_req, res) => {
 // Get account by ID
 router.get("/:id", async (req, res) => {
 	const id = Number(req.params.id);
-
 	if (isNaN(id)) {
-		throw new ValidationError("Invalid account ID", { field: "id", received: req.params.id });
+		throw new ValidationError("Invalid account ID", {
+			field: "id",
+			received: req.params.id,
+		});
 	}
-
-	const data = await getAccountID(id);
+	const data = await getAccountById(id);
 	res.status(200).json({
 		message: "Data received successfully",
 		data,
@@ -47,7 +48,10 @@ router.delete("/:id", async (req, res) => {
 	const id = Number(req.params.id);
 
 	if (isNaN(id)) {
-		throw new ValidationError("Invalid account ID", { field: "id", received: req.params.id });
+		throw new ValidationError("Invalid account ID", {
+			field: "id",
+			received: req.params.id,
+		});
 	}
 
 	const deletedData = await removeAccount(id);

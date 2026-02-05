@@ -17,7 +17,7 @@ export const getAllGroups = async (): Promise<Group[]> => {
 	}
 };
 
-export const findByID = async (groupId: number): Promise<Group | undefined> => {
+export const findById = async (groupId: number): Promise<Group | undefined> => {
 	try {
 		const res = await pool.query("SELECT * FROM groups WHERE id = $1", [
 			groupId,

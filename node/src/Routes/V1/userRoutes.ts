@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-	getUserID,
+	getUserById,
 	getUsers,
 	createUser,
 	removeUser,
@@ -27,7 +27,7 @@ router.get("/:id", async (req, res) => {
 		throw new ValidationError("Invalid user ID", { field: "id", received: req.params.id });
 	}
 
-	const data = await getUserID(id);
+	const data = await getUserById(id);
 	res.status(200).json({
 		message: "Data received successfully",
 		data,
@@ -59,17 +59,35 @@ router.delete("/:id", async (req, res) => {
 });
 
 // Get user transactions with account details
+// Supports pagination via query params: ?limit=15&offset=0
 router.get("/:id/transactions", async (req, res) => {
 	const id = Number(req.params.id);
+	const limit = Number(req.query.limit) || 15;
+	const offset = Number(req.query.offset) || 0;
 
 	if (isNaN(id)) {
 		throw new ValidationError("Invalid user ID", { field: "id", received: req.params.id });
 	}
 
-	const data = await getMostRecentTransactions(id);
+	if (limit < 1 || limit > 100) {
+		throw new ValidationError("Limit must be between 1 and 100", {
+			field: "limit",
+			received: req.query.limit,
+		});
+	}
+
+	if (offset < 0) {
+		throw new ValidationError("Offset must be non-negative", {
+			field: "offset",
+			received: req.query.offset,
+		});
+	}
+
+	const data = await getMostRecentTransactions(id, limit, offset);
 	res.status(200).json({
 		message: "User transactions with account data received successfully",
 		data,
+		pagination: { limit, offset },
 	});
 });
 

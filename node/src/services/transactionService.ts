@@ -1,6 +1,6 @@
 import {
-	getAlltransactions,
-	findByID,
+	getAllTransactions,
+	findById,
 	newTransaction,
 	deleteTransaction,
 } from "../repository/transactionRepository.js";
@@ -8,12 +8,12 @@ import { TablesInsert } from "../config/types.js";
 import { NotFoundError } from "../errors/index.js";
 
 export const getTransactions = async () => {
-	const transactions = await getAlltransactions();
+	const transactions = await getAllTransactions();
 	return transactions;
 };
 
-export const getTransactionID = async (id: number) => {
-	const transaction = await findByID(id);
+export const getTransactionById = async (id: number) => {
+	const transaction = await findById(id);
 	if (!transaction) {
 		throw new NotFoundError("Transaction", String(id));
 	}

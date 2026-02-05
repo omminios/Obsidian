@@ -29,8 +29,7 @@ app.use("/api/v1", v1Routes);
 // ============================================
 // Error Handling
 // ============================================
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-	// If it's an operational AppError, send structured response
+app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
 	if (err instanceof AppError) {
 		return res.status(err.statusCode).json({
 			status: "error",
@@ -40,7 +39,6 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 			timestamp: err.timestamp,
 		});
 	}
-	next();
 	// Unknown/unexpected error - don't leak details
 	console.error(err.stack);
 	return res.status(500).json({
@@ -48,6 +46,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 		errorCode: "INTERNAL_ERROR",
 		message: "An unexpected error occurred",
 	});
+	next();
 });
 
 export default app;

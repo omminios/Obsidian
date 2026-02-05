@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
 	getTransactions,
-	getTransactionID,
+	getTransactionById,
 	createTransaction,
 	removeTransaction,
 } from "../../services/transactionService.js";
@@ -26,7 +26,7 @@ router.get("/:id", async (req, res) => {
 		throw new ValidationError("Invalid transaction ID", { field: "id", received: req.params.id });
 	}
 
-	const data = await getTransactionID(id);
+	const data = await getTransactionById(id);
 	res.status(200).json({
 		message: "Data received successfully",
 		data,

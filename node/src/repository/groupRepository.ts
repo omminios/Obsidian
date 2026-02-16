@@ -1,11 +1,19 @@
 import { pool } from "../config/database.js";
 import { Tables, TablesInsert } from "../config/types.js";
-import { DatabaseError, ConflictError } from "../errors/index.js";
-import { isPostgresError } from "../utils/utils.js";
+import { DatabaseError } from "../errors/index.js";
+
+// ============================================
+// Typing
+// ============================================
 
 type Group = Tables<"groups">;
 type GroupMembership = Tables<"group_memberships">;
 
+// ============================================
+// Repository Functions
+// ============================================
+
+//Get all groups in the database
 export const getAllGroups = async (): Promise<Group[]> => {
 	try {
 		const res = await pool.query("SELECT * FROM groups");
@@ -17,6 +25,7 @@ export const getAllGroups = async (): Promise<Group[]> => {
 	}
 };
 
+//Find group by ID
 export const findById = async (groupId: number): Promise<Group | undefined> => {
 	try {
 		const res = await pool.query("SELECT * FROM groups WHERE id = $1", [
@@ -31,6 +40,7 @@ export const findById = async (groupId: number): Promise<Group | undefined> => {
 	}
 };
 
+// Create a new group
 export const newGroup = async (
 	groupData: TablesInsert<"groups">
 ): Promise<Group> => {
@@ -49,33 +59,7 @@ export const newGroup = async (
 	}
 };
 
-export const deleteGroup = async (
-	groupId: number
-): Promise<Group | undefined> => {
-	try {
-		const result = await pool.query(
-			`DELETE FROM groups WHERE id = $1 RETURNING *`,
-			[groupId]
-		);
-		return result.rows[0];
-	} catch (e) {
-		if (isPostgresError(e) && e.code === "23503") {
-			throw new ConflictError(
-				"Cannot delete group with existing references",
-				{
-					constraint: e.constraint,
-					detail: e.details,
-				}
-			);
-		}
-		throw new DatabaseError("Failed to delete group", {
-			groupId,
-			cause: e instanceof Error ? e.message : String(e),
-		});
-	}
-};
-
-// Get a user's membership in a group
+// Get a user's membership in a group used for checking if creator
 export const getMembership = async (
 	groupId: number,
 	userId: number
@@ -119,47 +103,18 @@ export const removeMember = async (
 	}
 };
 
-// Delete all memberships for a group (for cascade delete)
-export const deleteGroupMemberships = async (
+// Delete group part of a larger function in the services where it will check if you have membership of "creator" this is the atomic action
+export const deleteGroup = async (
 	groupId: number
-): Promise<void> => {
+): Promise<Group | undefined> => {
 	try {
-		await pool.query(`DELETE FROM group_memberships WHERE group_id = $1`, [
-			groupId,
-		]);
-	} catch (e) {
-		throw new DatabaseError("Failed to delete group memberships", {
-			groupId,
-			cause: e instanceof Error ? e.message : String(e),
-		});
-	}
-};
-
-// Delete all visibility settings for a group (for cascade delete)
-export const deleteGroupVisibility = async (groupId: number): Promise<void> => {
-	try {
-		await pool.query(
-			`DELETE FROM account_group_visibility WHERE group_id = $1`,
+		const res = await pool.query(
+			`DELETE FROM groups WHERE id = $1 RETURNING *`,
 			[groupId]
 		);
+		return res.rows[0];
 	} catch (e) {
-		throw new DatabaseError("Failed to delete group visibility settings", {
-			groupId,
-			cause: e instanceof Error ? e.message : String(e),
-		});
-	}
-};
-
-// Delete all invitations for a group (for cascade delete)
-export const deleteGroupInvitations = async (
-	groupId: number
-): Promise<void> => {
-	try {
-		await pool.query(`DELETE FROM invitations WHERE group_id = $1`, [
-			groupId,
-		]);
-	} catch (e) {
-		throw new DatabaseError("Failed to delete group invitations", {
+		throw new DatabaseError("Failed to delete group", {
 			groupId,
 			cause: e instanceof Error ? e.message : String(e),
 		});

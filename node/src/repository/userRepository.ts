@@ -5,14 +5,21 @@ import {
 } from "../errors/index.js";
 import { pool } from "../config/database.js";
 import { Tables, TablesInsert } from "../config/types.js";
-import { isPostgresError } from "../utils/utils.js";
+import { isPostgresError } from "../utils/postgressError.js";
+
+// ============================================
+// Types
+// ============================================
 
 type User = Tables<"users">;
-
 type UserSensitive = Omit<User, "password_hash">;
-
 type UserSummary = Pick<User, "id" | "username" | "first_name" | "last_name">;
 
+// ============================================
+// Repository Functions
+// ============================================
+
+// Find user by ID
 export const findById = async (
 	userId: number
 ): Promise<UserSensitive | undefined> => {
@@ -30,6 +37,7 @@ export const findById = async (
 	}
 };
 
+// Get all users in the database.
 export const getAllUsers = async (): Promise<UserSensitive[]> => {
 	try {
 		const res = await pool.query(
@@ -43,6 +51,7 @@ export const getAllUsers = async (): Promise<UserSensitive[]> => {
 	}
 };
 
+// Create a new user
 export const newUser = async (
 	userData: TablesInsert<"users">
 ): Promise<UserSensitive> => {
@@ -80,13 +89,14 @@ export const newUser = async (
 	}
 };
 
+// Delete user profile
 export const deleteProfile = async (
 	userId: number
 ): Promise<UserSummary | undefined> => {
 	try {
 		const res = await pool.query(
 			"DELETE FROM USERS WHERE ID = $1 RETURNING id, username, first_name, last_name",
-			[deleteUser]
+			[userId]
 		);
 		return res.rows[0];
 	} catch (e) {

@@ -4,6 +4,7 @@ import {
 	findById,
 	deleteProfile,
 } from "../repository/userRepository.js";
+import { getTransactionsWithAccounts } from "../repository/transactionRepository.js";
 import { TablesInsert } from "../config/types.js";
 import { NotFoundError } from "../errors/index.js";
 
@@ -33,4 +34,13 @@ export const removeUser = async (id: number) => {
 		throw new NotFoundError("User", String(id));
 	}
 	return deletedUser;
+};
+
+export const getMostRecentTransactions = async (
+	userId: number,
+	limit = 15,
+	offset = 0
+) => {
+	const transactions = await getTransactionsWithAccounts(userId, limit, offset);
+	return transactions;
 };

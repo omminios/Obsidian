@@ -5,7 +5,7 @@ import {
 	createUser,
 	removeUser,
 } from "../../services/userServices.js";
-import { getMostRecentTransactions } from "../../services/accountService.js";
+import { getMostRecentTransactions } from "../../services/userServices.js";
 import { ValidationError } from "../../errors/index.js";
 
 const router = Router();
@@ -24,7 +24,10 @@ router.get("/:id", async (req, res) => {
 	const id = Number(req.params.id);
 
 	if (isNaN(id)) {
-		throw new ValidationError("Invalid user ID", { field: "id", received: req.params.id });
+		throw new ValidationError("Invalid user ID", {
+			field: "id",
+			received: req.params.id,
+		});
 	}
 
 	const data = await getUserById(id);
@@ -48,7 +51,10 @@ router.delete("/:id", async (req, res) => {
 	const id = Number(req.params.id);
 
 	if (isNaN(id)) {
-		throw new ValidationError("Invalid user ID", { field: "id", received: req.params.id });
+		throw new ValidationError("Invalid user ID", {
+			field: "id",
+			received: req.params.id,
+		});
 	}
 
 	const deletedData = await removeUser(id);
@@ -66,7 +72,10 @@ router.get("/:id/transactions", async (req, res) => {
 	const offset = Number(req.query.offset) || 0;
 
 	if (isNaN(id)) {
-		throw new ValidationError("Invalid user ID", { field: "id", received: req.params.id });
+		throw new ValidationError("Invalid user ID", {
+			field: "id",
+			received: req.params.id,
+		});
 	}
 
 	if (limit < 1 || limit > 100) {

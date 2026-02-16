@@ -1,10 +1,22 @@
 import { pool } from "../config/database.js";
 import { Tables, TablesInsert } from "../config/types.js";
-import { DatabaseError, ConflictError } from "../errors/index.js";
-import { isPostgresError } from "../utils/utils.js";
+import {
+	DatabaseError,
+	ConflictError,
+	ValidationError,
+} from "../errors/index.js";
+import { isPostgresError } from "../utils/postgressError.js";
+
+// ============================================
+// Typing
+// ============================================
 
 type Account = Tables<"accounts">;
 type Transaction = Tables<"transactions">;
+
+// ============================================
+// Repository Functions
+// ============================================
 
 export const getAllAccounts = async (): Promise<Account[]> => {
 	try {
@@ -19,6 +31,7 @@ export const getAllAccounts = async (): Promise<Account[]> => {
 	}
 };
 
+// find account by ID
 export const findById = async (
 	accountId: number
 ): Promise<Account | undefined> => {
@@ -35,6 +48,7 @@ export const findById = async (
 	}
 };
 
+// creates a new account
 export const newAccount = async (
 	accountData: TablesInsert<"accounts">
 ): Promise<Account> => {
@@ -66,6 +80,12 @@ export const newAccount = async (
 					detail: e.details,
 				});
 			}
+			if (e.code === "23502") {
+				throw new ValidationError("Missing column data", {
+					constraint: e.constraint,
+					detail: e.details,
+				});
+			}
 		}
 		throw new DatabaseError("Failed to create account", {
 			cause: e instanceof Error ? e.message : String(e),
@@ -87,7 +107,14 @@ export const deactivateAccount = async (
 		);
 		return result.rows[0];
 	} catch (e) {
-		// Need to add authorization errors here
+		if (isPostgresError(e)) {
+			if (e.code === "23502") {
+				throw new ValidationError("Required field is missing", {
+					column: e.column,
+				});
+			}
+		}
+
 		throw new DatabaseError("Failed to deactivate account", {
 			accountId,
 			cause: e instanceof Error ? e.message : String(e),
@@ -95,36 +122,13 @@ export const deactivateAccount = async (
 	}
 };
 
-export const hasAccountAccess = async (
-	accountId: number,
-	userId: number
-): Promise<boolean> => {
-	try {
-		const res = await pool.query(
-			`SELECT 1 FROM account_members
-              WHERE account_id = $1
-              AND user_id = $2
-              AND ownership_type IN ('owner', 'joint', 'authorized_user')`,
-			[accountId, userId]
-		);
-		return res.rows.length > 0;
-	} catch (e) {
-		// Need to add authorization errors here
-		throw new DatabaseError("Failed to check account access", {
-			accountId,
-			userId,
-			cause: e instanceof Error ? e.message : String(e),
-		});
-	}
-};
-
-// Get all accounts a user can access (owned + shared)
+// Get all accounts a user can access (owned + shared) authorized_users cannot write to accounts just read.
 export const getAccessibleAccounts = async (
 	userId: number
 ): Promise<Account[]> => {
 	try {
 		const res = await pool.query(
-			`SELECT a.* FROM accounts a
+			`SELECT a.*, am.ownership_type FROM accounts a
               JOIN account_members am ON a.id = am.account_id
               WHERE am.user_id = $1
               AND am.ownership_type IN ('owner', 'joint', 'authorized_user')

@@ -5,7 +5,7 @@ import {
 	createAccount,
 	removeAccount,
 } from "../../services/accountService.js";
-import { ValidationError } from "../../errors/index.js";
+import { validateId } from "../../utils/validation.js";
 
 const router = Router();
 
@@ -20,13 +20,7 @@ router.get("/", async (_req, res) => {
 
 // Get account by ID
 router.get("/:id", async (req, res) => {
-	const id = Number(req.params.id);
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid account ID", {
-			field: "id",
-			received: req.params.id,
-		});
-	}
+	const id = validateId(req.params.id, "id");
 	const data = await getAccountById(id);
 	res.status(200).json({
 		message: "Data received successfully",
@@ -44,17 +38,11 @@ router.post("/", async (req, res) => {
 });
 
 // Delete account
-router.delete("/:id", async (req, res) => {
-	const id = Number(req.params.id);
+router.delete("/:id/:account_id", async (req, res) => {
+	const id = validateId(req.params.id, "id");
+	const accountId = validateId(req.params.account_id, "account_id");
 
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid account ID", {
-			field: "id",
-			received: req.params.id,
-		});
-	}
-
-	const deletedData = await removeAccount(id);
+	const deletedData = await removeAccount(id, accountId);
 	res.status(200).json({
 		message: "Account deleted",
 		account: deletedData,

@@ -5,7 +5,7 @@ import {
 	createTransaction,
 	removeTransaction,
 } from "../../services/transactionService.js";
-import { ValidationError } from "../../errors/index.js";
+import { validateId } from "../../utils/validation.js";
 
 const router = Router();
 
@@ -20,11 +20,7 @@ router.get("/", async (_req, res) => {
 
 // Get transaction by ID
 router.get("/:id", async (req, res) => {
-	const id = Number(req.params.id);
-
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid transaction ID", { field: "id", received: req.params.id });
-	}
+	const id = validateId(req.params.id, "id");
 
 	const data = await getTransactionById(id);
 	res.status(200).json({
@@ -44,11 +40,7 @@ router.post("/", async (req, res) => {
 
 // Delete transaction
 router.delete("/:id", async (req, res) => {
-	const id = Number(req.params.id);
-
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid transaction ID", { field: "id", received: req.params.id });
-	}
+	const id = validateId(req.params.id, "id");
 
 	const deletedData = await removeTransaction(id);
 	res.status(200).json({

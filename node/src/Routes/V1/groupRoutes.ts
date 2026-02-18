@@ -6,7 +6,7 @@ import {
 	removeGroup,
 	leaveGroup,
 } from "../../services/groupService.js";
-import { ValidationError } from "../../errors/index.js";
+import { validateId } from "../../utils/validation.js";
 
 const router = Router();
 
@@ -21,11 +21,7 @@ router.get("/", async (_req, res) => {
 
 // Get group by ID
 router.get("/:id", async (req, res) => {
-	const id = Number(req.params.id);
-
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid group ID", { field: "id", received: req.params.id });
-	}
+	const id = validateId(req.params.id, "id");
 
 	const data = await getGroupById(id);
 	res.status(200).json({
@@ -45,17 +41,9 @@ router.post("/", async (req, res) => {
 
 // Delete group (creator only)
 router.delete("/:id", async (req, res) => {
-	const id = Number(req.params.id);
+	const id = validateId(req.params.id, "id");
 	// TODO: Get userId from auth middleware (req.user.id)
-	const userId = Number(req.body.userId);
-
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid group ID", { field: "id", received: req.params.id });
-	}
-
-	if (isNaN(userId)) {
-		throw new ValidationError("User ID required", { field: "userId" });
-	}
+	const userId = validateId(req.body.userId, "userId");
 
 	const deletedData = await removeGroup(id, userId);
 	res.status(200).json({
@@ -66,17 +54,9 @@ router.delete("/:id", async (req, res) => {
 
 // Leave group (members only, not creator)
 router.post("/:id/leave", async (req, res) => {
-	const groupId = Number(req.params.id);
+	const groupId = validateId(req.params.id, "id");
 	// TODO: Get userId from auth middleware (req.user.id)
-	const userId = Number(req.body.userId);
-
-	if (isNaN(groupId)) {
-		throw new ValidationError("Invalid group ID", { field: "id", received: req.params.id });
-	}
-
-	if (isNaN(userId)) {
-		throw new ValidationError("User ID required", { field: "userId" });
-	}
+	const userId = validateId(req.body.userId, "userId");
 
 	const membership = await leaveGroup(groupId, userId);
 	res.status(200).json({

@@ -6,7 +6,7 @@ import {
 	removeUser,
 } from "../../services/userServices.js";
 import { getMostRecentTransactions } from "../../services/userServices.js";
-import { ValidationError } from "../../errors/index.js";
+import { validateId, validatePagination } from "../../utils/validation.js";
 
 const router = Router();
 
@@ -21,14 +21,7 @@ router.get("/", async (_req, res) => {
 
 // Get user by ID
 router.get("/:id", async (req, res) => {
-	const id = Number(req.params.id);
-
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid user ID", {
-			field: "id",
-			received: req.params.id,
-		});
-	}
+	const id = validateId(req.params.id, "id");
 
 	const data = await getUserById(id);
 	res.status(200).json({
@@ -48,14 +41,7 @@ router.post("/", async (req, res) => {
 
 // Delete user
 router.delete("/:id", async (req, res) => {
-	const id = Number(req.params.id);
-
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid user ID", {
-			field: "id",
-			received: req.params.id,
-		});
-	}
+	const id = validateId(req.params.id, "id");
 
 	const deletedData = await removeUser(id);
 	res.status(200).json({
@@ -67,30 +53,8 @@ router.delete("/:id", async (req, res) => {
 // Get user transactions with account details
 // Supports pagination via query params: ?limit=15&offset=0
 router.get("/:id/transactions", async (req, res) => {
-	const id = Number(req.params.id);
-	const limit = Number(req.query.limit) || 15;
-	const offset = Number(req.query.offset) || 0;
-
-	if (isNaN(id)) {
-		throw new ValidationError("Invalid user ID", {
-			field: "id",
-			received: req.params.id,
-		});
-	}
-
-	if (limit < 1 || limit > 100) {
-		throw new ValidationError("Limit must be between 1 and 100", {
-			field: "limit",
-			received: req.query.limit,
-		});
-	}
-
-	if (offset < 0) {
-		throw new ValidationError("Offset must be non-negative", {
-			field: "offset",
-			received: req.query.offset,
-		});
-	}
+	const id = validateId(req.params.id, "id");
+	const { limit, offset } = validatePagination(req.query);
 
 	const data = await getMostRecentTransactions(id, limit, offset);
 	res.status(200).json({

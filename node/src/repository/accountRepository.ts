@@ -13,6 +13,7 @@ import { isPostgresError } from "../utils/postgressError.js";
 
 type Account = Tables<"accounts">;
 type Transaction = Tables<"transactions">;
+type AccountMember = Tables<"account_members">;
 
 // ============================================
 // Repository Functions
@@ -122,7 +123,7 @@ export const deactivateAccount = async (
 	}
 };
 
-// Get all accounts a user can access (owned + shared) authorized_users cannot write to accounts just read.
+// Get all accounts a user can access (owned, joint and authorized accounts) for listing purposes
 export const getAccessibleAccounts = async (
 	userId: number
 ): Promise<Account[]> => {
@@ -136,6 +137,26 @@ export const getAccessibleAccounts = async (
 			[userId]
 		);
 		return res.rows;
+	} catch (e) {
+		throw new DatabaseError("Failed to fetch accessible accounts", {
+			userId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
+// for checking account membership access. (owner and joint can remove accounts)
+export const getAccountMembership = async (
+	userId: number,
+	account_id: number
+): Promise<AccountMember | undefined> => {
+	try {
+		const res = await pool.query(
+			`SELECT * FROM account_members
+			WHERE user_id = $1 AND account_id = $2`,
+			[userId, account_id]
+		);
+		return res.rows[0];
 	} catch (e) {
 		throw new DatabaseError("Failed to fetch accessible accounts", {
 			userId,

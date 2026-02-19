@@ -3,6 +3,7 @@ import userRoutes from "./userRoutes.js";
 import transactionRoutes from "./transactionRoutes.js";
 import groupRoutes from "./groupRoutes.js";
 import accountRoutes from "./accountRoutes.js";
+import registerRoutes from "./registrationRoutes.js";
 
 const router = Router();
 

@@ -30,7 +30,7 @@ router.get("/:id", async (req, res) => {
 	});
 });
 
-// Create new user
+// Creates new user without password hash. Use Register User instead.
 router.post("/", async (req, res) => {
 	const newUser = await createUser(req.body);
 	res.status(201).json({

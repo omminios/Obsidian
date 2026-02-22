@@ -12,6 +12,7 @@ router.use("/users", userRoutes);
 router.use("/transactions", transactionRoutes);
 router.use("/groups", groupRoutes);
 router.use("/accounts", accountRoutes);
+router.use("/register", registerRoutes);
 
 export default router;
 

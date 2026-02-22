@@ -22,7 +22,7 @@ export const getUserById = async (id: number) => {
 };
 
 // Id will automatically be created, as well as the initial creation date and updated date.
-// TODO: add a function to hash the password before inserting.
+// this funciton is for basic CRUD use Register User for actual user creation
 export const createUser = async (newUserdata: TablesInsert<"users">) => {
 	const userData = await newUser(newUserdata);
 	return userData;
@@ -41,6 +41,10 @@ export const getMostRecentTransactions = async (
 	limit = 15,
 	offset = 0
 ) => {
-	const transactions = await getTransactionsWithAccounts(userId, limit, offset);
+	const transactions = await getTransactionsWithAccounts(
+		userId,
+		limit,
+		offset
+	);
 	return transactions;
 };

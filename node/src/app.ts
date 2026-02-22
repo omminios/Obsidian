@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import AppError from "./errors/appError.js";
-import v1Routes from "./Routes/V1/index.js";
+import v1Routes from "./routes/V1/index.js";
 
 const app = express();
 

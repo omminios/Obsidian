@@ -36,6 +36,20 @@ export const findById = async (
 		});
 	}
 };
+// Find password hash for login functionality
+export const findByEmail = async (email: string): Promise<User | undefined> => {
+	try {
+		const res = await pool.query(
+			"SELECT id, email, username, password_hash, first_name, last_name, created_at, updated_at FROM users WHERE email = $1",
+			[email]
+		);
+		return res.rows[0];
+	} catch (e) {
+		throw new DatabaseError("Failed to fetch user", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
 
 // Get all users in the database.
 export const getAllUsers = async (): Promise<UserSensitive[]> => {

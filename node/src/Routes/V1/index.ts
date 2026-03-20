@@ -4,6 +4,8 @@ import transactionRoutes from "./transactionRoutes.js";
 import groupRoutes from "./groupRoutes.js";
 import accountRoutes from "./accountRoutes.js";
 import registerRoutes from "./registrationRoutes.js";
+import loginRoutes from "./loginRoute.js";
+import logoutRoutes from "./logoutRoute.js";
 
 const router = Router();
 
@@ -13,6 +15,8 @@ router.use("/transactions", transactionRoutes);
 router.use("/groups", groupRoutes);
 router.use("/accounts", accountRoutes);
 router.use("/register", registerRoutes);
+router.use("/login", loginRoutes);
+router.use("/logout", logoutRoutes);
 
 export default router;
 

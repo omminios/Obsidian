@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -374,12 +369,48 @@ export type Database = {
           },
         ]
       }
+      refresh_tokens: {
+        Row: {
+          created_at: string | null
+          expires_at: string
+          id: number
+          revoked_at: string | null
+          token_hash: string
+          user_id: number
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at: string
+          id?: number
+          revoked_at?: string | null
+          token_hash: string
+          user_id: number
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string
+          id?: number
+          revoked_at?: string | null
+          token_hash?: string
+          user_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refresh_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number | null
           category: string | null
           created_at: string | null
           description: string | null
+          entry_method: string
           id: number
           merchant_name: string | null
           plaid_id: string | null
@@ -392,6 +423,7 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           description?: string | null
+          entry_method?: string
           id?: number
           merchant_name?: string | null
           plaid_id?: string | null
@@ -404,6 +436,7 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           description?: string | null
+          entry_method?: string
           id?: number
           merchant_name?: string | null
           plaid_id?: string | null
@@ -595,3 +628,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from "express";
+import cookieParser from "cookie-parser";
 import AppError from "./errors/appError.js";
 import v1Routes from "./routes/V1/index.js";
 
@@ -8,6 +9,7 @@ const app = express();
 // Middleware
 // ============================================
 app.use(express.json());
+app.use(cookieParser());
 
 // ============================================
 // Routes

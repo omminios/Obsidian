@@ -29,8 +29,8 @@ export const getGroupById = async (id: number) => {
 };
 
 // make a new group with 2 or more people
-export const createGroup = async (groupData: TablesInsert<"groups">) => {
-	const group = await newGroup(groupData);
+export const createGroup = async (groupData: TablesInsert<"groups">, userId: number) => {
+	const group = await newGroup(groupData, userId);
 	return group;
 };
 

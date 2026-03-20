@@ -7,6 +7,7 @@ import {
 	leaveGroup,
 } from "../../services/groupService.js";
 import { validateId } from "../../utils/validation.js";
+import { authenticate } from "../../middleware/authenticate.js";
 
 const router = Router();
 
@@ -31,8 +32,8 @@ router.get("/:id", async (req, res) => {
 });
 
 // Create new group
-router.post("/", async (req, res) => {
-	const newGroup = await createGroup(req.body);
+router.post("/", authenticate, async (req, res) => {
+	const newGroup = await createGroup(req.body, req.user!.userId);
 	res.status(201).json({
 		message: "New Group created",
 		group: newGroup,
@@ -40,12 +41,9 @@ router.post("/", async (req, res) => {
 });
 
 // Delete group (creator only)
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticate, async (req, res) => {
 	const id = validateId(req.params.id, "id");
-	// TODO: Get userId from auth middleware (req.user.id)
-	const userId = validateId(req.body.userId, "userId");
-
-	const deletedData = await removeGroup(id, userId);
+	const deletedData = await removeGroup(id, req.user!.userId);
 	res.status(200).json({
 		message: "Group deleted",
 		group: deletedData,
@@ -53,12 +51,9 @@ router.delete("/:id", async (req, res) => {
 });
 
 // Leave group (members only, not creator)
-router.post("/:id/leave", async (req, res) => {
+router.post("/:id/leave", authenticate, async (req, res) => {
 	const groupId = validateId(req.params.id, "id");
-	// TODO: Get userId from auth middleware (req.user.id)
-	const userId = validateId(req.body.userId, "userId");
-
-	const membership = await leaveGroup(groupId, userId);
+	const membership = await leaveGroup(groupId, req.user!.userId);
 	res.status(200).json({
 		message: "Successfully left the group",
 		membership,

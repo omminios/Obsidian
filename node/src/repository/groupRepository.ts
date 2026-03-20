@@ -40,22 +40,38 @@ export const findById = async (groupId: number): Promise<Group | undefined> => {
 	}
 };
 
-// Create a new group
+// Create a new group and register the creator as a member in a single transaction
 export const newGroup = async (
-	groupData: TablesInsert<"groups">
+	groupData: TablesInsert<"groups">,
+	userId: number
 ): Promise<Group> => {
+	const client = await pool.connect();
 	try {
-		const res = await pool.query(
+		await client.query("BEGIN");
+
+		const groupRes = await client.query(
 			`INSERT INTO groups (name, max_users)
 			VALUES($1, $2)
 			RETURNING *`,
 			[groupData.name, groupData.max_users]
 		);
-		return res.rows[0];
+		const group: Group = groupRes.rows[0];
+
+		await client.query(
+			`INSERT INTO group_memberships (group_id, user_id, role)
+			VALUES($1, $2, 'creator')`,
+			[group.id, userId]
+		);
+
+		await client.query("COMMIT");
+		return group;
 	} catch (e) {
+		await client.query("ROLLBACK");
 		throw new DatabaseError("Failed to create group", {
 			cause: e instanceof Error ? e.message : String(e),
 		});
+	} finally {
+		client.release();
 	}
 };
 
@@ -74,6 +90,25 @@ export const getMembership = async (
 	} catch (e) {
 		throw new DatabaseError("Failed to fetch membership", {
 			groupId,
+			userId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
+// Get a user's single active membership across all groups
+export const findActiveMembership = async (
+	userId: number
+): Promise<GroupMembership | undefined> => {
+	try {
+		const res = await pool.query(
+			`SELECT * FROM group_memberships
+			WHERE user_id = $1 AND departed_at IS NULL`,
+			[userId]
+		);
+		return res.rows[0];
+	} catch (e) {
+		throw new DatabaseError("Failed to fetch active membership", {
 			userId,
 			cause: e instanceof Error ? e.message : String(e),
 		});

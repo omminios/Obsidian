@@ -5,7 +5,7 @@ declare global {
 	namespace Express {
 		interface Locals {
 			reissueToken?: boolean;
-			newRole?: string;
+			newRole?: string | null;
 		}
 	}
 }

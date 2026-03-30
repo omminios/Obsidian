@@ -1,45 +1,15 @@
 import { Router } from "express";
-import {
-	getUserById,
-	getUsers,
-	createUser,
-	removeUser,
-} from "../../services/userServices.js";
+import { removeUser } from "../../services/userServices.js";
 import { getMostRecentTransactions } from "../../services/userServices.js";
 import { validateId, validatePagination } from "../../utils/validation.js";
+import { authenticate } from "../../middleware/authenticate.js";
 
 const router = Router();
 
-// Get all users
-router.get("/", async (_req, res) => {
-	const data = await getUsers();
-	res.status(200).json({
-		message: "Data received successfully",
-		data,
-	});
-});
+// All user routes require authentication
+router.use(authenticate);
 
-// Get user by ID
-router.get("/:id", async (req, res) => {
-	const id = validateId(req.params.id, "id");
-
-	const data = await getUserById(id);
-	res.status(200).json({
-		message: "Data received successfully",
-		data,
-	});
-});
-
-// Creates new user without password hash. Use Register User instead.
-router.post("/", async (req, res) => {
-	const newUser = await createUser(req.body);
-	res.status(201).json({
-		message: "New User created",
-		user: newUser,
-	});
-});
-
-// Delete user
+// Delete user (own account)
 router.delete("/:id", async (req, res) => {
 	const id = validateId(req.params.id, "id");
 

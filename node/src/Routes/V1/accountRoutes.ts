@@ -1,22 +1,16 @@
 import { Router } from "express";
 import {
-	getAccounts,
 	getAccountById,
 	createAccount,
 	removeAccount,
 } from "../../services/accountService.js";
 import { validateId } from "../../utils/validation.js";
+import { authenticate } from "../../middleware/authenticate.js";
 
 const router = Router();
 
-// Get all accounts
-router.get("/", async (_req, res) => {
-	const data = await getAccounts();
-	res.status(200).json({
-		message: "Data received successfully",
-		data,
-	});
-});
+// All account routes require authentication
+router.use(authenticate);
 
 // Get account by ID
 router.get("/:id", async (req, res) => {

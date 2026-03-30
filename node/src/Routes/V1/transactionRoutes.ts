@@ -1,22 +1,16 @@
 import { Router } from "express";
 import {
-	getTransactions,
 	getTransactionById,
 	createTransaction,
 	removeTransaction,
 } from "../../services/transactionService.js";
 import { validateId } from "../../utils/validation.js";
+import { authenticate } from "../../middleware/authenticate.js";
 
 const router = Router();
 
-// Get all transactions
-router.get("/", async (_req, res) => {
-	const data = await getTransactions();
-	res.status(200).json({
-		message: "Data received successfully",
-		data,
-	});
-});
+// All transaction routes require authentication
+router.use(authenticate);
 
 // Get transaction by ID
 router.get("/:id", async (req, res) => {

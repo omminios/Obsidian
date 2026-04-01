@@ -32,9 +32,9 @@ router.post("/", async (req, res) => {
 });
 
 // Delete account
-router.delete("/:id/:account_id", async (req, res) => {
-	const id = validateId(req.params.id, "id");
-	const accountId = validateId(req.params.account_id, "account_id");
+router.delete("/", async (req, res) => {
+	const id = validateId(req.body.id, "id");
+	const accountId = validateId(req.body.account_id, "account_id");
 
 	const deletedData = await removeAccount(id, accountId);
 	res.status(200).json({

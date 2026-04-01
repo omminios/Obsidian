@@ -10,8 +10,8 @@ const router = Router();
 router.use(authenticate);
 
 // Delete user (own account)
-router.delete("/:id", async (req, res) => {
-	const id = validateId(req.params.id, "id");
+router.delete("/", async (req, res) => {
+	const id = validateId(req.body.id, "id");
 
 	const deletedData = await removeUser(id);
 	res.status(200).json({

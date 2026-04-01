@@ -33,8 +33,8 @@ router.post("/", async (req, res) => {
 });
 
 // Delete transaction
-router.delete("/:id", async (req, res) => {
-	const id = validateId(req.params.id, "id");
+router.delete("/", async (req, res) => {
+	const id = validateId(req.body.id, "id");
 
 	const deletedData = await removeTransaction(id);
 	res.status(200).json({

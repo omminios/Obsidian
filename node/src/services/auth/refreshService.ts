@@ -4,11 +4,13 @@ import {
 	storeRefreshToken,
 	findRefreshToken,
 	revokeRefreshToken,
+	revokeAllUserRefreshTokens,
 } from "../../repository/refreshTokenRepository.js";
 import { findActiveMembership } from "../../repository/groupRepository.js";
 import { AuthenticationError } from "../../errors/index.js";
 
 const REFRESH_TOKEN_EXPIRES_DAYS = 7;
+const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 
 export const issueRefreshToken = async (userId: number): Promise<string> => {
 	const refreshToken = signRefreshToken({ userId });
@@ -33,6 +35,12 @@ export const refreshTokens = async (
 	const stored = await findRefreshToken(tokenHash);
 	if (!stored) {
 		throw new AuthenticationError("Refresh token not recognised or already revoked");
+	}
+
+	const lastActivity = new Date(stored.created_at!).getTime();
+	if (Date.now() - lastActivity > INACTIVITY_LIMIT_MS) {
+		await revokeAllUserRefreshTokens(payload.userId);
+		throw new AuthenticationError("Session expired due to inactivity");
 	}
 
 	// Rotate: revoke old, issue new

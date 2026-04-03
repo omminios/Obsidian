@@ -39,7 +39,7 @@ router.post("/", attachFreshToken, async (req, res) => {
 // Delete group (creator only)
 router.delete("/", attachFreshToken, async (req, res) => {
 	const id = validateId(req.body.id, "id");
-	const deletedData = await removeGroup(id, req.user!.userId);
+	const deletedData = await removeGroup(id, req.user!.userId, req.user!.role);
 	res.locals.reissueToken = true;
 	res.locals.newRole = null;
 
@@ -52,7 +52,7 @@ router.delete("/", attachFreshToken, async (req, res) => {
 // Leave group (members only, not creator)
 router.post("/leave", attachFreshToken, async (req, res) => {
 	const groupId = validateId(req.body.id, "id");
-	const membership = await leaveGroup(groupId, req.user!.userId);
+	const membership = await leaveGroup(groupId, req.user!.userId, req.user!.role);
 	res.status(200).json({
 		message: "Successfully left the group",
 		membership,

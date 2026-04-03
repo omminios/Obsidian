@@ -34,19 +34,25 @@ export const createGroup = async (groupData: TablesInsert<"groups">, userId: num
 	return group;
 };
 
-// Only creator can delete - removes all related data
+// Only creator or admin can delete - removes all related data
 export const removeGroup = async (
 	groupId: number,
-	requestingUserId: number
+	requestingUserId: number,
+	requestingRole: string | null
 ) => {
 	const group = await findById(groupId);
 	if (!group) {
 		throw new NotFoundError("Group", String(groupId));
 	}
 
-	// Check if user is creator
 	const membership = await getMembership(groupId, requestingUserId);
-	if (!membership || membership.role !== "creator") {
+	if (!membership && requestingRole !== "admin") {
+		throw new AuthorizationError(
+			"Only the group creator can delete this group"
+		);
+	}
+
+	if (membership && membership.role !== "creator" && requestingRole !== "admin") {
 		throw new AuthorizationError(
 			"Only the group creator can delete this group"
 		);
@@ -56,8 +62,12 @@ export const removeGroup = async (
 	return deletedGroup;
 };
 
-// Members can leave (except creator)
-export const leaveGroup = async (groupId: number, userId: number) => {
+// Members can leave (except creator). Admins can remove any member.
+export const leaveGroup = async (
+	groupId: number,
+	userId: number,
+	requestingRole: string | null
+) => {
 	const group = await findById(groupId);
 	if (!group) {
 		throw new NotFoundError("Group", String(groupId));
@@ -68,7 +78,7 @@ export const leaveGroup = async (groupId: number, userId: number) => {
 		throw new NotFoundError("Membership");
 	}
 
-	if (membership.role === "creator") {
+	if (membership.role === "creator" && requestingRole !== "admin") {
 		throw new ConflictError(
 			"Creator cannot leave group. Transfer ownership or delete the group."
 		);

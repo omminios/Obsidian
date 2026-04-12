@@ -101,7 +101,7 @@ export const deactivateAccount = async (
 	try {
 		const result = await pool.query(
 			`UPDATE accounts
-			SET is_active = false, updated_at = NOW()
+			SET is_active = false
 			WHERE id = $1
 			RETURNING *`,
 			[accountId]

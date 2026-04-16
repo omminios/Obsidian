@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { removeUser } from "../../services/userServices.js";
 import { getMostRecentTransactions } from "../../services/userServices.js";
-import { validateId, validatePagination } from "../../utils/validation.js";
 import { authenticate } from "../../middleware/authenticate.js";
+import { validate } from "../../middleware/validate.js";
+import { idParamSchema, paginationQuerySchema } from "../../schemas/common.js";
+import { deleteUserSchema } from "../../schemas/userSchemas.js";
 
 const router = Router();
 
@@ -10,10 +12,8 @@ const router = Router();
 router.use(authenticate);
 
 // Delete user (own account)
-router.delete("/", async (req, res) => {
-	const id = validateId(req.body.id, "id");
-
-	const deletedData = await removeUser(id);
+router.delete("/", validate({ body: deleteUserSchema }), async (req, res) => {
+	const deletedData = await removeUser(req.body.id);
 	res.status(200).json({
 		message: "User Deleted",
 		user: deletedData,
@@ -22,9 +22,9 @@ router.delete("/", async (req, res) => {
 
 // Get user transactions with account details
 // Supports pagination via query params: ?limit=15&offset=0
-router.get("/:id/transactions", async (req, res) => {
-	const id = validateId(req.params.id, "id");
-	const { limit, offset } = validatePagination(req.query);
+router.get("/:id/transactions", validate({ params: idParamSchema, query: paginationQuerySchema }), async (req, res) => {
+	const id = Number(req.params.id);
+	const { limit, offset } = req.query as unknown as { limit: number; offset: number };
 
 	const data = await getMostRecentTransactions(id, limit, offset);
 	res.status(200).json({

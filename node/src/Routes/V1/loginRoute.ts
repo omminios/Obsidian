@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { loginUser } from "../../services/auth/loginService.js";
+import { validate } from "../../middleware/validate.js";
+import { loginSchema } from "../../schemas/authSchemas.js";
 
 const router = Router();
 
-router.post("/", async (req, res) => {
+router.post("/", validate({ body: loginSchema }), async (req, res) => {
 	const { accessToken, refreshToken } = await loginUser(req.body);
 
 	res.cookie("access_token", `Bearer ${accessToken}`, {

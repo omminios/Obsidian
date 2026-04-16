@@ -4,8 +4,10 @@ import {
 	createTransaction,
 	removeTransaction,
 } from "../../services/transactionService.js";
-import { validateId } from "../../utils/validation.js";
 import { authenticate } from "../../middleware/authenticate.js";
+import { validate } from "../../middleware/validate.js";
+import { idParamSchema } from "../../schemas/common.js";
+import { createTransactionSchema, deleteTransactionSchema } from "../../schemas/transactionSchemas.js";
 
 const router = Router();
 
@@ -13,8 +15,8 @@ const router = Router();
 router.use(authenticate);
 
 // Get transaction by ID
-router.get("/:id", async (req, res) => {
-	const id = validateId(req.params.id, "id");
+router.get("/:id", validate({ params: idParamSchema }), async (req, res) => {
+	const id = Number(req.params.id);
 
 	const data = await getTransactionById(id);
 	res.status(200).json({
@@ -24,8 +26,8 @@ router.get("/:id", async (req, res) => {
 });
 
 // Create new transaction
-router.post("/", async (req, res) => {
-	const newTransaction = await createTransaction(req.body);
+router.post("/", validate({ body: createTransactionSchema }), async (req, res) => {
+	const newTransaction = await createTransaction({ ...req.body, user_id: req.user!.userId });
 	res.status(201).json({
 		message: "New Transaction created",
 		transaction: newTransaction,
@@ -33,10 +35,8 @@ router.post("/", async (req, res) => {
 });
 
 // Delete transaction
-router.delete("/", async (req, res) => {
-	const id = validateId(req.body.id, "id");
-
-	const deletedData = await removeTransaction(id);
+router.delete("/", validate({ body: deleteTransactionSchema }), async (req, res) => {
+	const deletedData = await removeTransaction(req.body.id);
 	res.status(200).json({
 		message: "Transaction deleted",
 		transaction: deletedData,

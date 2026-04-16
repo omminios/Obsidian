@@ -3,9 +3,11 @@ import { getUsers, getUserById, createUser } from "../../services/userServices.j
 import { getAccounts } from "../../services/accountService.js";
 import { getTransactions } from "../../services/transactionService.js";
 import { getGroups } from "../../services/groupService.js";
-import { validateId } from "../../utils/validation.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorizeAdmin } from "../../middleware/authorizeAdmin.js";
+import { validate } from "../../middleware/validate.js";
+import { idParamSchema } from "../../schemas/common.js";
+import { createUserSchema } from "../../schemas/userSchemas.js";
 
 const router = Router();
 
@@ -22,8 +24,8 @@ router.get("/users", async (_req, res) => {
 });
 
 // Get user by ID
-router.get("/users/:id", async (req, res) => {
-	const id = validateId(req.params.id, "id");
+router.get("/users/:id", validate({ params: idParamSchema }), async (req, res) => {
+	const id = Number(req.params.id);
 
 	const data = await getUserById(id);
 	res.status(200).json({
@@ -33,7 +35,7 @@ router.get("/users/:id", async (req, res) => {
 });
 
 // Create user without registration flow (admin bypass)
-router.post("/users", async (req, res) => {
+router.post("/users", validate({ body: createUserSchema }), async (req, res) => {
 	const newUser = await createUser(req.body);
 	res.status(201).json({
 		message: "New User created",

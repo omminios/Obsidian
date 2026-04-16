@@ -25,5 +25,3 @@ router.use("/accounts", accountRoutes);
 router.use("/admin", adminRoutes);
 
 export default router;
-
-//Note need to import Zod for schema validation later.

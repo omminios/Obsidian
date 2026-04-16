@@ -4,8 +4,10 @@ import {
 	createAccount,
 	removeAccount,
 } from "../../services/accountService.js";
-import { validateId } from "../../utils/validation.js";
 import { authenticate } from "../../middleware/authenticate.js";
+import { validate } from "../../middleware/validate.js";
+import { idParamSchema } from "../../schemas/common.js";
+import { createAccountSchema, deleteAccountSchema } from "../../schemas/accountSchemas.js";
 
 const router = Router();
 
@@ -13,8 +15,8 @@ const router = Router();
 router.use(authenticate);
 
 // Get account by ID
-router.get("/:id", async (req, res) => {
-	const id = validateId(req.params.id, "id");
+router.get("/:id", validate({ params: idParamSchema }), async (req, res) => {
+	const id = Number(req.params.id);
 	const data = await getAccountById(id);
 	res.status(200).json({
 		message: "Data received successfully",
@@ -23,8 +25,8 @@ router.get("/:id", async (req, res) => {
 });
 
 // Create new account
-router.post("/", async (req, res) => {
-	const newAccount = await createAccount(req.body);
+router.post("/", validate({ body: createAccountSchema }), async (req, res) => {
+	const newAccount = await createAccount({ ...req.body, user_id: req.user!.userId });
 	res.status(201).json({
 		message: "New Account created",
 		account: newAccount,
@@ -32,11 +34,8 @@ router.post("/", async (req, res) => {
 });
 
 // Delete account
-router.delete("/", async (req, res) => {
-	const id = validateId(req.body.id, "id");
-	const accountId = validateId(req.body.account_id, "account_id");
-
-	const deletedData = await removeAccount(id, accountId);
+router.delete("/", validate({ body: deleteAccountSchema }), async (req, res) => {
+	const deletedData = await removeAccount(req.user!.userId, req.body.account_id);
 	res.status(200).json({
 		message: "Account deleted",
 		account: deletedData,

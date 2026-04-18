@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(curl:*)",
-      "Bash(python -m json.tool:*)"
+      "Bash(python -m json.tool:*)",
+      "Bash(npm uninstall *)",
+      "Bash(npm install *)",
+      "Bash(npm ls *)",
+      "Bash(npm view *)",
+      "Bash(npx jest *)",
+      "Bash(ls *)",
+      "Bash(npx vitest *)"
     ]
   }
 }

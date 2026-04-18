@@ -1,12 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import { signAccessToken } from "../utils/jwt.js";
 
-declare global {
-	namespace Express {
-		interface Locals {
-			reissueToken?: boolean;
-			newRole?: string | null;
-		}
+declare module "express-serve-static-core" {
+	interface Locals {
+		reissueToken?: boolean;
+		newRole?: string | null;
 	}
 }
 

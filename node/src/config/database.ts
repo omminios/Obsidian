@@ -3,11 +3,12 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Load environment variables
-dotenv.config({ path: join(__dirname, "../../../.env.local") });
+// Skip dotenv loading if connection string is already set (e.g., in test environment)
+if (!process.env.supabase) {
+	const __filename = fileURLToPath(import.meta.url);
+	const __dirname = dirname(__filename);
+	dotenv.config({ path: join(__dirname, "../../../.env.local") });
+}
 
 /**Connection string for Supabase */
 const connectionString = process.env.supabase;

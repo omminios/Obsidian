@@ -4,6 +4,7 @@ import {
 	newGroup,
 	deleteGroup,
 	getMembership,
+	findActiveMembership,
 	removeMember,
 } from "../repository/groupRepository.js";
 import { TablesInsert } from "../config/types.js";
@@ -30,6 +31,11 @@ export const getGroupById = async (id: number) => {
 
 // make a new group with 2 or more people
 export const createGroup = async (groupData: TablesInsert<"groups">, userId: number) => {
+	const existing = await findActiveMembership(userId);
+	if (existing?.role === "creator") {
+		throw new ConflictError("You already own a group");
+	}
+
 	const group = await newGroup(groupData, userId);
 	return group;
 };

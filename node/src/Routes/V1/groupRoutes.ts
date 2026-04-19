@@ -6,6 +6,8 @@ import {
 	leaveGroup,
 } from "../../services/groupService.js";
 import { authenticate } from "../../middleware/authenticate.js";
+import { authorizeMember } from "../../middleware/authorizeMember.js";
+import { authorizeCreator } from "../../middleware/authorizeCreator.js";
 import { attachFreshToken } from "../../middleware/attachFreshToken.js";
 import { validate } from "../../middleware/validate.js";
 import { idParamSchema } from "../../schemas/common.js";
@@ -16,8 +18,8 @@ const router = Router();
 // All group routes require authentication
 router.use(authenticate);
 
-// Get group by ID
-router.get("/:id", validate({ params: idParamSchema }), async (req, res) => {
+// Get group by ID (members only)
+router.get("/:id", authorizeMember, validate({ params: idParamSchema }), async (req, res) => {
 	const id = Number(req.params.id);
 	const data = await getGroupById(id);
 	res.status(200).json({
@@ -26,7 +28,7 @@ router.get("/:id", validate({ params: idParamSchema }), async (req, res) => {
 	});
 });
 
-// Create new group
+// Create new group (any authenticated user except creators)
 router.post("/", attachFreshToken, validate({ body: createGroupSchema }), async (req, res) => {
 	const newGroup = await createGroup(req.body, req.user!.userId);
 	res.locals.reissueToken = true;
@@ -39,7 +41,7 @@ router.post("/", attachFreshToken, validate({ body: createGroupSchema }), async 
 });
 
 // Delete group (creator only)
-router.delete("/", attachFreshToken, validate({ body: deleteGroupSchema }), async (req, res) => {
+router.delete("/", authorizeCreator, attachFreshToken, validate({ body: deleteGroupSchema }), async (req, res) => {
 	const deletedData = await removeGroup(req.body.id, req.user!.userId, req.user!.role);
 	res.locals.reissueToken = true;
 	res.locals.newRole = null;
@@ -51,7 +53,7 @@ router.delete("/", attachFreshToken, validate({ body: deleteGroupSchema }), asyn
 });
 
 // Leave group (members only, not creator)
-router.post("/leave", attachFreshToken, validate({ body: leaveGroupSchema }), async (req, res) => {
+router.post("/leave", authorizeMember, attachFreshToken, validate({ body: leaveGroupSchema }), async (req, res) => {
 	const membership = await leaveGroup(req.body.id, req.user!.userId, req.user!.role);
 	res.status(200).json({
 		message: "Successfully left the group",

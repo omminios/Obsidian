@@ -2,14 +2,15 @@ import { Router } from "express";
 import { removeUser } from "../../services/userServices.js";
 import { getMostRecentTransactions } from "../../services/userServices.js";
 import { authenticate } from "../../middleware/authenticate.js";
+import { authorizeMember } from "../../middleware/authorizeMember.js";
 import { validate } from "../../middleware/validate.js";
 import { idParamSchema, paginationQuerySchema } from "../../schemas/common.js";
 import { deleteUserSchema } from "../../schemas/userSchemas.js";
 
 const router = Router();
 
-// All user routes require authentication
-router.use(authenticate);
+// All user routes require authentication + group membership
+router.use(authenticate, authorizeMember);
 
 // Delete user (own account)
 router.delete("/", validate({ body: deleteUserSchema }), async (req, res) => {

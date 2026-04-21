@@ -210,6 +210,54 @@ export type Database = {
           },
         ]
       }
+      audit_log: {
+        Row: {
+          action_source: string
+          changed_at: string
+          exported_at: string | null
+          group_id: number | null
+          id: number
+          ip_address: unknown
+          new_data: Json | null
+          old_data: Json | null
+          operation: string
+          record_id: number
+          session_id: string | null
+          table_name: string
+          user_id: number | null
+        }
+        Insert: {
+          action_source: string
+          changed_at?: string
+          exported_at?: string | null
+          group_id?: number | null
+          id?: number
+          ip_address?: unknown
+          new_data?: Json | null
+          old_data?: Json | null
+          operation: string
+          record_id: number
+          session_id?: string | null
+          table_name: string
+          user_id?: number | null
+        }
+        Update: {
+          action_source?: string
+          changed_at?: string
+          exported_at?: string | null
+          group_id?: number | null
+          id?: number
+          ip_address?: unknown
+          new_data?: Json | null
+          old_data?: Json | null
+          operation?: string
+          record_id?: number
+          session_id?: string | null
+          table_name?: string
+          user_id?: number | null
+        }
+        Relationships: []
+      }
       group_memberships: {
         Row: {
           departed_at: string | null
@@ -458,32 +506,32 @@ export type Database = {
         Row: {
           created_at: string | null
           email: string
-          first_name: string | null
+          first_name: string
           id: number
-          last_name: string | null
+          last_name: string
           password_hash: string
           updated_at: string | null
-          username: string | null
+          username: string
         }
         Insert: {
           created_at?: string | null
           email: string
-          first_name?: string | null
+          first_name: string
           id?: number
-          last_name?: string | null
+          last_name: string
           password_hash: string
           updated_at?: string | null
-          username?: string | null
+          username: string
         }
         Update: {
           created_at?: string | null
           email?: string
-          first_name?: string | null
+          first_name?: string
           id?: number
-          last_name?: string | null
+          last_name?: string
           password_hash?: string
           updated_at?: string | null
-          username?: string | null
+          username?: string
         }
         Relationships: []
       }
@@ -628,4 +676,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

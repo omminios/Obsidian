@@ -1,0 +1,86 @@
+import { Router } from "express";
+import { validate } from "../../middleware/validate.js";
+import { authenticate } from "../../middleware/authenticate.js";
+import {
+	createInvitationSchema,
+	acceptInvitationSchema,
+	declineInvitationSchema,
+} from "../../schemas/invitationSchemas.js";
+import {
+	sendInvitation,
+	resendInvitation,
+	acceptInvitation,
+	declineInvitation,
+} from "../../services/invitationService.js";
+
+const router = Router();
+
+// Send invitation — requires authenticated creator/admin
+router.post(
+	"/",
+	authenticate,
+	validate({ body: createInvitationSchema }),
+	async (req, res) => {
+		const { token, invitationId } = await sendInvitation(
+			req.user!.userId,
+			req.user!.groupId,
+			req.user!.role,
+			req.body.invitee_email
+		);
+
+		// Token is returned in the response for now.
+		// In production, this would be sent via email instead.
+		res.status(201).json({
+			message: "Invitation sent",
+			token,
+			invitationId,
+		});
+	}
+);
+
+// Resend invitation — invalidates old token, issues a new one
+router.post(
+	"/resend",
+	authenticate,
+	validate({ body: createInvitationSchema }),
+	async (req, res) => {
+		const { token, invitationId } = await resendInvitation(
+			req.user!.userId,
+			req.user!.groupId,
+			req.user!.role,
+			req.body.invitee_email
+		);
+
+		res.status(200).json({
+			message: "Invitation resent",
+			token,
+			invitationId,
+		});
+	}
+);
+
+// Accept invitation — requires authenticated user
+router.post(
+	"/accept",
+	authenticate,
+	validate({ body: acceptInvitationSchema }),
+	async (req, res) => {
+		await acceptInvitation(req.body.token, req.user!.userId);
+
+		res.status(200).json({ message: "Invitation accepted" });
+	}
+);
+
+// Decline invitation — requires authenticated user
+router.post(
+	"/decline",
+	authenticate,
+	validate({ body: declineInvitationSchema }),
+	async (req, res) => {
+		await declineInvitation(req.body.token, req.user!.userId);
+
+		res.status(200).json({ message: "Invitation declined" });
+	}
+);
+
+export default router;

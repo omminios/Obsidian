@@ -8,52 +8,30 @@ import {
 } from "../../schemas/invitationSchemas.js";
 import {
 	sendInvitation,
-	resendInvitation,
 	acceptInvitation,
 	declineInvitation,
 } from "../../services/invitationService.js";
+import { sendInvitationEmail } from "../../services/emailService.js";
 
 const router = Router();
 
-// Send invitation — requires authenticated creator/admin
+// Send or resend invitation — requires authenticated creator/admin
 router.post(
 	"/",
 	authenticate,
 	validate({ body: createInvitationSchema }),
 	async (req, res) => {
-		const { token, invitationId } = await sendInvitation(
+		const { token, invitationId, inviterName, groupName } = await sendInvitation(
 			req.user!.userId,
 			req.user!.groupId,
 			req.user!.role,
 			req.body.invitee_email
 		);
 
-		// Token is returned in the response for now.
-		// In production, this would be sent via email instead.
+		await sendInvitationEmail(req.body.invitee_email, inviterName, groupName, token);
+
 		res.status(201).json({
 			message: "Invitation sent",
-			token,
-			invitationId,
-		});
-	}
-);
-
-// Resend invitation — invalidates old token, issues a new one
-router.post(
-	"/resend",
-	authenticate,
-	validate({ body: createInvitationSchema }),
-	async (req, res) => {
-		const { token, invitationId } = await resendInvitation(
-			req.user!.userId,
-			req.user!.groupId,
-			req.user!.role,
-			req.body.invitee_email
-		);
-
-		res.status(200).json({
-			message: "Invitation resent",
-			token,
 			invitationId,
 		});
 	}

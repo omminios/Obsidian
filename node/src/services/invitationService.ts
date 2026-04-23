@@ -10,7 +10,10 @@ import {
 	updateInvitationStatus,
 	purgeExpiredInvitations,
 } from "../repository/invitationRepository.js";
-import { findActiveMembership } from "../repository/groupRepository.js";
+import {
+	findActiveMembership,
+	findById as findGroupById,
+} from "../repository/groupRepository.js";
 import {
 	AuthorizationError,
 	ConflictError,
@@ -20,12 +23,19 @@ import {
 
 const INVITATION_EXPIRES_DAYS = 7;
 
+interface InvitationResult {
+	token: string;
+	invitationId: number;
+	inviterName: string;
+	groupName: string;
+}
+
 export const sendInvitation = async (
 	inviterUserId: number,
 	inviterGroupId: number | null,
 	inviterRole: string | null,
 	inviteeEmail: string
-): Promise<{ token: string; invitationId: number }> => {
+): Promise<InvitationResult> => {
 	if (!inviterGroupId || !inviterRole) {
 		throw new AuthorizationError(
 			"You must create a group before you can invite members"
@@ -43,10 +53,13 @@ export const sendInvitation = async (
 		inviterGroupId
 	);
 	if (existing) {
-		throw new ConflictError(
-			"A pending invitation already exists for this email and group"
-		);
+		await invalidatePendingInvitation(inviteeEmail, inviterGroupId);
 	}
+
+	const [inviter, group] = await Promise.all([
+		findById(inviterUserId),
+		findGroupById(inviterGroupId),
+	]);
 
 	const rawToken = crypto.randomBytes(32).toString("hex");
 	const tokenHash = hashToken(rawToken);
@@ -62,55 +75,12 @@ export const sendInvitation = async (
 		expiresAt
 	);
 
-	return { token: rawToken, invitationId: invitation.id };
-};
-
-export const resendInvitation = async (
-	inviterUserId: number,
-	inviterGroupId: number | null,
-	inviterRole: string | null,
-	inviteeEmail: string
-): Promise<{ token: string; invitationId: number }> => {
-	if (!inviterGroupId || !inviterRole) {
-		throw new AuthorizationError(
-			"You must create a group before you can invite members"
-		);
-	}
-
-	if (inviterRole !== "creator" && inviterRole !== "admin") {
-		throw new AuthorizationError(
-			"Only group creators or admins can send invitations"
-		);
-	}
-
-	const existing = await findPendingInvitationForEmail(
-		inviteeEmail,
-		inviterGroupId
-	);
-	if (!existing) {
-		throw new NotFoundError(
-			"Pending invitation",
-			`${inviteeEmail} in group ${inviterGroupId}`
-		);
-	}
-
-	await invalidatePendingInvitation(inviteeEmail, inviterGroupId);
-
-	const rawToken = crypto.randomBytes(32).toString("hex");
-	const tokenHash = hashToken(rawToken);
-
-	const expiresAt = new Date();
-	expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRES_DAYS);
-
-	const invitation = await createInvitation(
-		inviterUserId,
-		inviteeEmail,
-		inviterGroupId,
-		tokenHash,
-		expiresAt
-	);
-
-	return { token: rawToken, invitationId: invitation.id };
+	return {
+		token: rawToken,
+		invitationId: invitation.id,
+		inviterName: `${inviter!.first_name} ${inviter!.last_name}`,
+		groupName: group!.name,
+	};
 };
 
 export const acceptInvitation = async (

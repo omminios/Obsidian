@@ -1,11 +1,10 @@
 import crypto from "crypto";
-import { hashToken } from "../../utils/hashing.js";
-import { hashPassword } from "../../utils/hashing.js";
-import { findByEmail, updatePassword } from "../../repository/userRepository.js";
+import { hashToken, hashPassword } from "../../utils/hashing.js";
+import { findByEmail } from "../../repository/userRepository.js";
 import {
 	storeResetToken,
 	findValidResetToken,
-	markTokenUsed,
+	resetPasswordAndMarkUsed,
 	purgeExpiredResetTokens,
 } from "../../repository/passwordResetRepository.js";
 import { AuthenticationError } from "../../errors/index.js";
@@ -43,8 +42,7 @@ export const resetPassword = async (
 	}
 
 	const hashedPassword = await hashPassword(newPassword);
-	await updatePassword(stored.user_id, hashedPassword);
-	await markTokenUsed(stored.id);
+	await resetPasswordAndMarkUsed(stored.user_id, hashedPassword, stored.id);
 };
 
 export { purgeExpiredResetTokens };

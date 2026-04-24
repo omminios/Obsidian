@@ -52,6 +52,36 @@ export const markTokenUsed = async (tokenId: number): Promise<void> => {
 	}
 };
 
+export const resetPasswordAndMarkUsed = async (
+	userId: number,
+	passwordHash: string,
+	tokenId: number
+): Promise<void> => {
+	const client = await pool.connect();
+	try {
+		await client.query("BEGIN");
+
+		await client.query(
+			"UPDATE users SET password_hash = $1 WHERE id = $2",
+			[passwordHash, userId]
+		);
+
+		await client.query(
+			"UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1",
+			[tokenId]
+		);
+
+		await client.query("COMMIT");
+	} catch (e) {
+		await client.query("ROLLBACK");
+		throw new DatabaseError("Failed to reset password", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	} finally {
+		client.release();
+	}
+};
+
 export const purgeExpiredResetTokens = async (): Promise<number> => {
 	try {
 		const res = await pool.query(

@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { hashToken } from "../utils/hashing.js";
-import { findById } from "../repository/userRepository.js";
+import { findById, findByEmail } from "../repository/userRepository.js";
 import {
 	createInvitation,
 	findValidInvitationByToken,
@@ -48,6 +48,23 @@ export const sendInvitation = async (
 		);
 	}
 
+	const [inviter, group] = await Promise.all([
+		findById(inviterUserId),
+		findGroupById(inviterGroupId),
+	]);
+
+	if (inviter!.email === inviteeEmail) {
+		throw new ConflictError("You cannot invite yourself");
+	}
+
+	const invitee = await findByEmail(inviteeEmail);
+	if (invitee) {
+		const inviteeMembership = await findActiveMembership(invitee.id);
+		if (inviteeMembership) {
+			throw new ConflictError("This user is already a member of a group");
+		}
+	}
+
 	const existing = await findPendingInvitationForEmail(
 		inviteeEmail,
 		inviterGroupId
@@ -55,11 +72,6 @@ export const sendInvitation = async (
 	if (existing) {
 		await invalidatePendingInvitation(inviteeEmail, inviterGroupId);
 	}
-
-	const [inviter, group] = await Promise.all([
-		findById(inviterUserId),
-		findGroupById(inviterGroupId),
-	]);
 
 	const rawToken = crypto.randomBytes(32).toString("hex");
 	const tokenHash = hashToken(rawToken);

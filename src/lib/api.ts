@@ -83,4 +83,10 @@ export const api = {
 			method: "POST",
 			body: JSON.stringify({ token }),
 		}),
+
+	sendInvitation: (invitee_email: string) =>
+		request<{ message: string; invitationId: number | string }>("/api/v1/invitations", {
+			method: "POST",
+			body: JSON.stringify({ invitee_email }),
+		}),
 };

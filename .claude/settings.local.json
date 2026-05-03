@@ -14,7 +14,12 @@
       "Bash(mkdir -p .handoff-tmp)",
       "Bash(unzip -o Obsidian-handoff.zip -d .handoff-tmp)",
       "Bash(sed 's/=.*$/=<redacted>/')",
-      "Bash(docker rmi obsidian-node-backend:latest *)"
+      "Bash(docker rmi obsidian-node-backend:latest *)",
+      "Bash(mkdir -p /tmp/obsidian-handoff)",
+      "Bash(unzip -o Obsidian-handoff.zip -d /tmp/obsidian-handoff/)",
+      "Bash(rm -rf \"C:/Users/Owner/Documents/Projects/Owen\")",
+      "Read(//c/Users/Owner/Documents/Projects/**)",
+      "Bash(npx tsc *)"
     ]
   }
 }

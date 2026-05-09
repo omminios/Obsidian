@@ -28,8 +28,10 @@
 		"jsonwebtoken": "^9.0.3",
 		"nodemon": "^3.1.11",
 		"pg": "^8.16.3",
+		"plaid": "^42.2.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
+		"react-plaid-link": "^4.1.1",
 		"tailwindcss": "^4.1.17",
 		"zod": "^4.3.6"
 	},

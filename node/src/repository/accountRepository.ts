@@ -165,6 +165,53 @@ export const getAccountMembership = async (
 	}
 };
 
+// Make an account visible to a group. Idempotent via the unique constraint.
+export const shareAccountWithGroup = async (
+	accountId: number,
+	groupId: number
+): Promise<void> => {
+	try {
+		await pool.query(
+			`INSERT INTO account_group_visibility (account_id, group_id)
+			VALUES ($1, $2)
+			ON CONFLICT (account_id, group_id) DO NOTHING`,
+			[accountId, groupId]
+		);
+	} catch (e) {
+		if (isPostgresError(e) && e.code === "23503") {
+			throw new ConflictError(
+				"Referenced account or group does not exist",
+				{ constraint: e.constraint }
+			);
+		}
+		throw new DatabaseError("Failed to share account with group", {
+			accountId,
+			groupId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
+// Remove an account from a group's visibility.
+export const unshareAccountFromGroup = async (
+	accountId: number,
+	groupId: number
+): Promise<void> => {
+	try {
+		await pool.query(
+			`DELETE FROM account_group_visibility
+			WHERE account_id = $1 AND group_id = $2`,
+			[accountId, groupId]
+		);
+	} catch (e) {
+		throw new DatabaseError("Failed to unshare account from group", {
+			accountId,
+			groupId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
 // Get transactions for accounts user has access to
 export const getAccessibleTransactions = async (
 	userId: number

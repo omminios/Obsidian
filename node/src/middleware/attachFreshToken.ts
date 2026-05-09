@@ -5,6 +5,7 @@ declare module "express-serve-static-core" {
 	interface Locals {
 		reissueToken?: boolean;
 		newRole?: string | null;
+		newGroupId?: number | null;
 	}
 }
 
@@ -19,7 +20,10 @@ export const attachFreshToken = (
 		if (res.locals.reissueToken && req.user) {
 			const newAccessToken = signAccessToken({
 				userId: req.user.userId,
-				groupId: req.user.groupId,
+				groupId:
+					res.locals.newGroupId !== undefined
+						? res.locals.newGroupId
+						: req.user.groupId,
 				role: res.locals.newRole ?? req.user.role,
 			});
 

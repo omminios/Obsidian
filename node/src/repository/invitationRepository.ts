@@ -99,6 +99,35 @@ export const acceptInvitationAndJoinGroup = async (
 	try {
 		await client.query("BEGIN");
 
+		const membershipRes = await client.query(
+			`SELECT gm.group_id,
+			        gm.role,
+			        (SELECT COUNT(*) FROM group_memberships
+			           WHERE group_id = gm.group_id AND departed_at IS NULL) AS member_count
+			   FROM group_memberships gm
+			  WHERE gm.user_id = $1 AND gm.departed_at IS NULL
+			  FOR UPDATE`,
+			[userId]
+		);
+
+		if (membershipRes.rows.length > 0) {
+			const { group_id: oldGroupId, role, member_count } = membershipRes.rows[0];
+
+			// Only a self-created 1-member auto-group is safe to dissolve.
+			// Anything else means the user is already in a real household.
+			if (role !== "creator" || Number(member_count) !== 1) {
+				throw new ConflictError(
+					"You are already in a household. Leave it before accepting another invite."
+				);
+			}
+
+			// CASCADE removes the user's old membership and the old auto-group's
+			// account_group_visibility rows. Accounts stay (FK on accounts.user_id
+			// is unaffected), but they become hidden from any group until the
+			// user explicitly shares them with the new household.
+			await client.query(`DELETE FROM groups WHERE id = $1`, [oldGroupId]);
+		}
+
 		await client.query(
 			`INSERT INTO group_memberships (group_id, user_id, role)
 			VALUES ($1, $2, 'member')`,
@@ -115,6 +144,7 @@ export const acceptInvitationAndJoinGroup = async (
 		await client.query("COMMIT");
 	} catch (e) {
 		await client.query("ROLLBACK");
+		if (e instanceof ConflictError) throw e;
 		throw new DatabaseError("Failed to accept invitation", {
 			cause: e instanceof Error ? e.message : String(e),
 		});

@@ -1,9 +1,9 @@
 import { Router } from "express";
 import {
 	getGroupById,
-	createGroup,
 	removeGroup,
 	leaveGroup,
+	kickMember,
 } from "../../services/groupService.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorizeMember } from "../../middleware/authorizeMember.js";
@@ -11,7 +11,11 @@ import { authorizeCreator } from "../../middleware/authorizeCreator.js";
 import { attachFreshToken } from "../../middleware/attachFreshToken.js";
 import { validate } from "../../middleware/validate.js";
 import { idParamSchema } from "../../schemas/common.js";
-import { createGroupSchema, deleteGroupSchema, leaveGroupSchema } from "../../schemas/groupSchemas.js";
+import {
+	deleteGroupSchema,
+	leaveGroupSchema,
+	kickMemberSchema,
+} from "../../schemas/groupSchemas.js";
 
 const router = Router();
 
@@ -28,36 +32,55 @@ router.get("/:id", authorizeMember, validate({ params: idParamSchema }), async (
 	});
 });
 
-// Create new group (any authenticated user except creators)
-router.post("/", attachFreshToken, validate({ body: createGroupSchema }), async (req, res) => {
-	const newGroup = await createGroup(req.body, req.user!.userId);
-	res.locals.reissueToken = true;
-	res.locals.newRole = null;
-
-	res.status(201).json({
-		message: "New Group created",
-		group: newGroup,
-	});
-});
-
-// Delete group (creator only)
+// Delete group (creator only). Re-mints the access token with the deleter's
+// new personal auto-group on the payload.
 router.delete("/", authorizeCreator, attachFreshToken, validate({ body: deleteGroupSchema }), async (req, res) => {
-	const deletedData = await removeGroup(req.body.id, req.user!.userId, req.user!.role);
+	const { deletedGroup, newGroupId } = await removeGroup(
+		req.body.id,
+		req.user!.userId,
+		req.user!.role
+	);
 	res.locals.reissueToken = true;
-	res.locals.newRole = null;
+	res.locals.newGroupId = newGroupId;
+	res.locals.newRole = "creator";
 
 	res.status(200).json({
 		message: "Group deleted",
-		group: deletedData,
+		group: deletedGroup,
+		new_group_id: newGroupId,
 	});
 });
 
-// Leave group (members only, not creator)
+// Leave group (members only, not creator). Re-mints the access token with
+// the leaver's new personal auto-group on the payload.
 router.post("/leave", authorizeMember, attachFreshToken, validate({ body: leaveGroupSchema }), async (req, res) => {
-	const membership = await leaveGroup(req.body.id, req.user!.userId, req.user!.role);
+	const { membership, newGroupId } = await leaveGroup(
+		req.body.id,
+		req.user!.userId,
+		req.user!.role
+	);
+	res.locals.reissueToken = true;
+	res.locals.newGroupId = newGroupId;
+	res.locals.newRole = "creator";
+
 	res.status(200).json({
 		message: "Successfully left the group",
 		membership,
+		new_group_id: newGroupId,
+	});
+});
+
+// Kick a member (creator only). Operates on the caller's own group from the JWT.
+router.post("/kick", authorizeCreator, validate({ body: kickMemberSchema }), async (req, res) => {
+	const removed = await kickMember(
+		req.user!.groupId!,
+		req.user!.userId,
+		req.user!.role,
+		req.body.user_id
+	);
+	res.status(200).json({
+		message: "Member removed from group",
+		membership: removed,
 	});
 });
 

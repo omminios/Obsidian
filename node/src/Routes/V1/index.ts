@@ -9,6 +9,7 @@ import loginRoutes from "./loginRoute.js";
 import logoutRoutes from "./logoutRoute.js";
 import passwordResetRoutes from "./passwordResetRoutes.js";
 import invitationRoutes from "./invitationRoutes.js";
+import plaidRoutes from "./plaidRoutes.js";
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.use("/transactions", transactionRoutes);
 router.use("/groups", groupRoutes);
 router.use("/accounts", accountRoutes);
 router.use("/invitations", invitationRoutes);
+router.use("/plaid", plaidRoutes);
 
 // Admin routes
 router.use("/admin", adminRoutes);

@@ -23,11 +23,11 @@ describe("groupRepository", () => {
 		it("should create a group and register creator as member", async () => {
 			const user = await seedUser();
 
-			const group = await newGroup({ name: "Family", max_users: 4 }, user.id);
+			const group = await newGroup({ name: "Family", member_count: 4 }, user.id);
 
 			expect(group).toBeDefined();
 			expect(group.name).toBe("Family");
-			expect(group.max_users).toBe(4);
+			expect(group.member_count).toBe(4);
 			expect(group.id).toEqual(expect.any(Number));
 
 			// Verify creator was added as a member
@@ -40,7 +40,7 @@ describe("groupRepository", () => {
 			// user_id 99999 doesn't exist, so the membership insert
 			// will fail with a FK violation and the entire transaction should rollback
 			await expect(
-				newGroup({ name: "Ghost Group", max_users: 2 }, 99999)
+				newGroup({ name: "Ghost Group", member_count: 2 }, 99999)
 			).rejects.toThrow();
 
 			// Group should not have been created
@@ -61,14 +61,14 @@ describe("groupRepository", () => {
 
 		it("should return all groups", async () => {
 			const user = await seedUser();
-			await newGroup({ name: "Group A", max_users: 3 }, user.id);
+			await newGroup({ name: "Group A", member_count: 3 }, user.id);
 
 			// Need second user since one-group-per-user constraint
 			const user2 = await seedUser({
 				email: "b@test.com",
 				username: "userB",
 			});
-			await newGroup({ name: "Group B", max_users: 5 }, user2.id);
+			await newGroup({ name: "Group B", member_count: 5 }, user2.id);
 
 			const groups = await getAllGroups();
 			expect(groups).toHaveLength(2);
@@ -83,7 +83,7 @@ describe("groupRepository", () => {
 		it("should return the group by id", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Lookup Test", max_users: 2 },
+				{ name: "Lookup Test", member_count: 2 },
 				user.id
 			);
 
@@ -106,7 +106,7 @@ describe("groupRepository", () => {
 		it("should return active membership", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Test Group", max_users: 3 },
+				{ name: "Test Group", member_count: 3 },
 				user.id
 			);
 
@@ -119,7 +119,7 @@ describe("groupRepository", () => {
 		it("should not return departed memberships", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Left Group", max_users: 3 },
+				{ name: "Left Group", member_count: 3 },
 				user.id
 			);
 			await removeMember(group.id, user.id);
@@ -143,7 +143,7 @@ describe("groupRepository", () => {
 		it("should return the user's active membership", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Active Group", max_users: 3 },
+				{ name: "Active Group", member_count: 3 },
 				user.id
 			);
 
@@ -161,7 +161,7 @@ describe("groupRepository", () => {
 		it("should not return departed memberships", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Old Group", max_users: 3 },
+				{ name: "Old Group", member_count: 3 },
 				user.id
 			);
 			await removeMember(group.id, user.id);
@@ -179,7 +179,7 @@ describe("groupRepository", () => {
 		it("should set departed_at and return the membership", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Leave Group", max_users: 3 },
+				{ name: "Leave Group", member_count: 3 },
 				user.id
 			);
 
@@ -191,7 +191,7 @@ describe("groupRepository", () => {
 		it("should return undefined if already departed", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Already Left", max_users: 3 },
+				{ name: "Already Left", member_count: 3 },
 				user.id
 			);
 			await removeMember(group.id, user.id);
@@ -215,7 +215,7 @@ describe("groupRepository", () => {
 		it("should delete the group and return it", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Delete Me", max_users: 2 },
+				{ name: "Delete Me", member_count: 2 },
 				user.id
 			);
 
@@ -231,7 +231,7 @@ describe("groupRepository", () => {
 		it("should cascade delete memberships", async () => {
 			const user = await seedUser();
 			const group = await newGroup(
-				{ name: "Cascade Test", max_users: 2 },
+				{ name: "Cascade Test", member_count: 2 },
 				user.id
 			);
 			await deleteGroup(group.id);

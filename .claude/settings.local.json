@@ -19,7 +19,9 @@
       "Bash(unzip -o Obsidian-handoff.zip -d /tmp/obsidian-handoff/)",
       "Bash(rm -rf \"C:/Users/Owner/Documents/Projects/Owen\")",
       "Read(//c/Users/Owner/Documents/Projects/**)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(docker volume rm *)"
     ]
   }
 }

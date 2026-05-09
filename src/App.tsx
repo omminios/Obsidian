@@ -7,6 +7,7 @@ import { ForgotPassword } from "./pages/ForgotPassword";
 import { ResetPassword } from "./pages/ResetPassword";
 import { AcceptInvitation } from "./pages/AcceptInvitation";
 import { Dashboard } from "./pages/Dashboard";
+import { Onboarding } from "./pages/Onboarding";
 
 const TITLES: Record<string, string> = {
 	"/": "Obsidian — Personal finance for households",
@@ -15,6 +16,7 @@ const TITLES: Record<string, string> = {
 	"/forgot-password": "Forgot password · Obsidian",
 	"/reset-password": "Reset password · Obsidian",
 	"/invitations": "Accept invitation · Obsidian",
+	"/onboarding": "Set up · Obsidian",
 	"/dashboard": "Dashboard · Obsidian",
 };
 
@@ -36,6 +38,8 @@ function Routes() {
 			return <ResetPassword />;
 		case "/dashboard":
 			return <Dashboard />;
+		case "/onboarding":
+			return <Onboarding />;
 		case "/invitations":
 			return <AcceptInvitation />;
 		case "/":

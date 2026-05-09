@@ -89,4 +89,29 @@ export const api = {
 			method: "POST",
 			body: JSON.stringify({ invitee_email }),
 		}),
+
+	createLinkToken: () =>
+		request<{ link_token: string; expiration: string }>("/api/v1/plaid/link-token", {
+			method: "POST",
+		}),
+
+	exchangePublicToken: (public_token: string) =>
+		request<{
+			message: string;
+			institution_name: string | null;
+			accounts: Array<{
+				id: number;
+				plaid_account_id: string;
+				account_name: string;
+				account_type: string;
+				institution_name: string | null;
+				last_four: string | null;
+				balance_current: number | null;
+				balance_available: number | null;
+			}>;
+			transaction_count: number;
+		}>("/api/v1/plaid/exchange-token", {
+			method: "POST",
+			body: JSON.stringify({ public_token }),
+		}),
 };

@@ -3,12 +3,17 @@ import {
 	getAccountById,
 	createAccount,
 	removeAccount,
+	shareAccount,
+	unshareAccount,
 } from "../../services/accountService.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorizeMember } from "../../middleware/authorizeMember.js";
 import { validate } from "../../middleware/validate.js";
 import { idParamSchema } from "../../schemas/common.js";
-import { createAccountSchema, deleteAccountSchema } from "../../schemas/accountSchemas.js";
+import {
+	createAccountSchema,
+	deleteAccountSchema,
+} from "../../schemas/accountSchemas.js";
 
 const router = Router();
 
@@ -42,5 +47,35 @@ router.delete("/", validate({ body: deleteAccountSchema }), async (req, res) => 
 		account: deletedData,
 	});
 });
+
+// Share an account with the caller's current group
+router.post(
+	"/:id/share",
+	validate({ params: idParamSchema }),
+	async (req, res) => {
+		const accountId = Number(req.params.id);
+		await shareAccount(req.user!.userId, accountId, req.user!.groupId!);
+		res.status(200).json({
+			message: "Account shared with group",
+			account_id: accountId,
+			group_id: req.user!.groupId,
+		});
+	}
+);
+
+// Unshare an account from the caller's current group
+router.delete(
+	"/:id/share",
+	validate({ params: idParamSchema }),
+	async (req, res) => {
+		const accountId = Number(req.params.id);
+		await unshareAccount(req.user!.userId, accountId, req.user!.groupId!);
+		res.status(200).json({
+			message: "Account unshared from group",
+			account_id: accountId,
+			group_id: req.user!.groupId,
+		});
+	}
+);
 
 export default router;

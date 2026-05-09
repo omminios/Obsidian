@@ -1,17 +1,19 @@
+import { pool } from "../config/database.js";
 import {
 	getAllGroups,
 	findById,
-	newGroup,
 	deleteGroup,
 	getMembership,
-	findActiveMembership,
 	removeMember,
+	createPersonalGroupForUser,
+	unlinkUserAccountsFromGroup,
+	listActiveMemberIds,
 } from "../repository/groupRepository.js";
-import { TablesInsert } from "../config/types.js";
 import {
 	NotFoundError,
 	AuthorizationError,
 	ConflictError,
+	DatabaseError,
 } from "../errors/index.js";
 
 // Get all groups in database
@@ -29,18 +31,9 @@ export const getGroupById = async (id: number) => {
 	return group;
 };
 
-// make a new group with 2 or more people
-export const createGroup = async (groupData: TablesInsert<"groups">, userId: number) => {
-	const existing = await findActiveMembership(userId);
-	if (existing?.role === "creator") {
-		throw new ConflictError("You already own a group");
-	}
-
-	const group = await newGroup(groupData, userId);
-	return group;
-};
-
-// Only creator or admin can delete - removes all related data
+// Only creator or admin can delete. Cascades memberships and visibility, then
+// re-issues a fresh personal auto-group for every former member so nobody
+// ends up groupless.
 export const removeGroup = async (
 	groupId: number,
 	requestingUserId: number,
@@ -64,11 +57,46 @@ export const removeGroup = async (
 		);
 	}
 
-	const deletedGroup = await deleteGroup(groupId);
-	return deletedGroup;
+	const client = await pool.connect();
+	try {
+		await client.query("BEGIN");
+
+		const memberIds = await listActiveMemberIds(groupId, client);
+		const deletedGroup = await deleteGroup(groupId, client);
+
+		const newGroupIdByUser = new Map<number, number>();
+		for (const memberUserId of memberIds) {
+			const ng = await createPersonalGroupForUser(memberUserId, client);
+			newGroupIdByUser.set(memberUserId, ng.id);
+		}
+
+		await client.query("COMMIT");
+
+		return {
+			deletedGroup,
+			newGroupId: newGroupIdByUser.get(requestingUserId) ?? null,
+		};
+	} catch (e) {
+		await client.query("ROLLBACK");
+		if (
+			e instanceof NotFoundError ||
+			e instanceof AuthorizationError ||
+			e instanceof ConflictError ||
+			e instanceof DatabaseError
+		) {
+			throw e;
+		}
+		throw new DatabaseError("Failed to delete group", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	} finally {
+		client.release();
+	}
 };
 
-// Members can leave (except creator). Admins can remove any member.
+// Members can leave (except creator). Admins can remove any member. Soft-departs
+// the membership, removes the user's accounts from the household's visibility,
+// then re-issues a fresh personal auto-group for them.
 export const leaveGroup = async (
 	groupId: number,
 	userId: number,
@@ -90,6 +118,98 @@ export const leaveGroup = async (
 		);
 	}
 
-	const removedMembership = await removeMember(groupId, userId);
-	return removedMembership;
+	const client = await pool.connect();
+	try {
+		await client.query("BEGIN");
+
+		const removedMembership = await removeMember(groupId, userId, client);
+		await unlinkUserAccountsFromGroup(userId, groupId, client);
+		const newGroup = await createPersonalGroupForUser(userId, client);
+
+		await client.query("COMMIT");
+
+		return { membership: removedMembership, newGroupId: newGroup.id };
+	} catch (e) {
+		await client.query("ROLLBACK");
+		if (
+			e instanceof NotFoundError ||
+			e instanceof ConflictError ||
+			e instanceof DatabaseError
+		) {
+			throw e;
+		}
+		throw new DatabaseError("Failed to leave group", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	} finally {
+		client.release();
+	}
+};
+
+// Creator (or admin) removes another member from their group. The kicked user
+// gets the same dissolve+restore treatment as a voluntary leave: their accounts
+// drop out of the household's visibility and they get a fresh personal group.
+export const kickMember = async (
+	groupId: number,
+	kickingUserId: number,
+	kickingRole: string | null,
+	targetUserId: number
+) => {
+	if (kickingRole !== "creator" && kickingRole !== "admin") {
+		throw new AuthorizationError(
+			"Only the group creator can remove members"
+		);
+	}
+
+	if (kickingUserId === targetUserId) {
+		throw new ConflictError(
+			"Use the leave endpoint to remove yourself from a group"
+		);
+	}
+
+	const group = await findById(groupId);
+	if (!group) {
+		throw new NotFoundError("Group", String(groupId));
+	}
+
+	const targetMembership = await getMembership(groupId, targetUserId);
+	if (!targetMembership) {
+		throw new NotFoundError("Membership");
+	}
+
+	if (targetMembership.role === "creator") {
+		throw new ConflictError("Cannot remove the group creator");
+	}
+
+	const client = await pool.connect();
+	try {
+		await client.query("BEGIN");
+
+		const removedMembership = await removeMember(
+			groupId,
+			targetUserId,
+			client
+		);
+		await unlinkUserAccountsFromGroup(targetUserId, groupId, client);
+		await createPersonalGroupForUser(targetUserId, client);
+
+		await client.query("COMMIT");
+
+		return removedMembership;
+	} catch (e) {
+		await client.query("ROLLBACK");
+		if (
+			e instanceof NotFoundError ||
+			e instanceof ConflictError ||
+			e instanceof AuthorizationError ||
+			e instanceof DatabaseError
+		) {
+			throw e;
+		}
+		throw new DatabaseError("Failed to remove member", {
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	} finally {
+		client.release();
+	}
 };

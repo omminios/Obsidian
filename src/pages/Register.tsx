@@ -84,7 +84,7 @@ export function Register() {
 				first_name: data.first_name,
 				last_name: data.last_name,
 			});
-			navigate(returnTo || "/dashboard");
+			navigate(returnTo || "/onboarding");
 		} catch (e) {
 			setErr(
 				e instanceof ApiError

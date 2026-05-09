@@ -165,6 +165,8 @@ export type Database = {
           last_four: string | null
           plaid_account_id: string | null
           plaid_item_id: string | null
+          plaid_subtype: string | null
+          plaid_type: string | null
           updated_at: string | null
           user_id: number
         }
@@ -181,6 +183,8 @@ export type Database = {
           last_four?: string | null
           plaid_account_id?: string | null
           plaid_item_id?: string | null
+          plaid_subtype?: string | null
+          plaid_type?: string | null
           updated_at?: string | null
           user_id: number
         }
@@ -197,6 +201,8 @@ export type Database = {
           last_four?: string | null
           plaid_account_id?: string | null
           plaid_item_id?: string | null
+          plaid_subtype?: string | null
+          plaid_type?: string | null
           updated_at?: string | null
           user_id?: number
         }
@@ -304,19 +310,19 @@ export type Database = {
         Row: {
           created_at: string | null
           id: number
-          max_users: number | null
+          member_count: number | null
           name: string
         }
         Insert: {
           created_at?: string | null
           id?: number
-          max_users?: number | null
+          member_count?: number | null
           name: string
         }
         Update: {
           created_at?: string | null
           id?: number
-          max_users?: number | null
+          member_count?: number | null
           name?: string
         }
         Relationships: []
@@ -417,6 +423,56 @@ export type Database = {
           },
         ]
       }
+      plaid_items: {
+        Row: {
+          access_token_ciphertext: string
+          access_token_iv: string
+          access_token_tag: string
+          created_at: string | null
+          id: number
+          institution_id: string | null
+          institution_name: string | null
+          plaid_item_id: string
+          transactions_cursor: string | null
+          updated_at: string | null
+          user_id: number
+        }
+        Insert: {
+          access_token_ciphertext: string
+          access_token_iv: string
+          access_token_tag: string
+          created_at?: string | null
+          id?: number
+          institution_id?: string | null
+          institution_name?: string | null
+          plaid_item_id: string
+          transactions_cursor?: string | null
+          updated_at?: string | null
+          user_id: number
+        }
+        Update: {
+          access_token_ciphertext?: string
+          access_token_iv?: string
+          access_token_tag?: string
+          created_at?: string | null
+          id?: number
+          institution_id?: string | null
+          institution_name?: string | null
+          plaid_item_id?: string
+          transactions_cursor?: string | null
+          updated_at?: string | null
+          user_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plaid_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       refresh_tokens: {
         Row: {
           created_at: string | null
@@ -461,6 +517,7 @@ export type Database = {
           entry_method: string
           id: number
           merchant_name: string | null
+          pending: boolean
           plaid_id: string | null
           transaction_date: string
           updated_at: string | null
@@ -474,6 +531,7 @@ export type Database = {
           entry_method?: string
           id?: number
           merchant_name?: string | null
+          pending?: boolean
           plaid_id?: string | null
           transaction_date: string
           updated_at?: string | null
@@ -487,6 +545,7 @@ export type Database = {
           entry_method?: string
           id?: number
           merchant_name?: string | null
+          pending?: boolean
           plaid_id?: string | null
           transaction_date?: string
           updated_at?: string | null

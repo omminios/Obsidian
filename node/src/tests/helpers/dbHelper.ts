@@ -10,6 +10,7 @@ const ALL_TABLES = [
 	"account_members",
 	"account_group_visibility",
 	"group_memberships",
+	"plaid_items",
 	"transactions",
 	"accounts",
 	"groups",

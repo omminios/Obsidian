@@ -11,8 +11,8 @@ import {
 	purgeExpiredInvitations,
 } from "../repository/invitationRepository.js";
 import {
-	findActiveMembership,
 	findById as findGroupById,
+	isInSharedHousehold,
 } from "../repository/groupRepository.js";
 import {
 	AuthorizationError,
@@ -36,9 +36,11 @@ export const sendInvitation = async (
 	inviterRole: string | null,
 	inviteeEmail: string
 ): Promise<InvitationResult> => {
+	// Every user has an auto-created group from registration; null here means
+	// the JWT predates the auto-group change. Tell the user to re-authenticate.
 	if (!inviterGroupId || !inviterRole) {
 		throw new AuthorizationError(
-			"You must create a group before you can invite members"
+			"Group context missing from session. Please sign out and back in."
 		);
 	}
 
@@ -59,9 +61,10 @@ export const sendInvitation = async (
 
 	const invitee = await findByEmail(inviteeEmail);
 	if (invitee) {
-		const inviteeMembership = await findActiveMembership(invitee.id);
-		if (inviteeMembership) {
-			throw new ConflictError("This user is already a member of a group");
+		// Auto-groups (1-member, self-created) don't count — those dissolve on accept.
+		const inSharedHousehold = await isInSharedHousehold(invitee.id);
+		if (inSharedHousehold) {
+			throw new ConflictError("This user is already a member of a household");
 		}
 	}
 
@@ -117,11 +120,9 @@ export const acceptInvitation = async (
 		);
 	}
 
-	const existingMembership = await findActiveMembership(acceptingUserId);
-	if (existingMembership) {
-		throw new ConflictError("You are already a member of a group");
-	}
-
+	// The repository transactionally dissolves a 1-member auto-group and joins
+	// the new group, or throws ConflictError if the user is already a real
+	// household member.
 	await acceptInvitationAndJoinGroup(
 		invitation.id,
 		invitation.group_id!,

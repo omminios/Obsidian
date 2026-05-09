@@ -4,6 +4,8 @@ import {
 	newAccount,
 	deactivateAccount,
 	getAccountMembership,
+	shareAccountWithGroup,
+	unshareAccountFromGroup,
 } from "../repository/accountRepository.js";
 import { TablesInsert } from "../config/types.js";
 
@@ -49,4 +51,59 @@ export const removeAccount = async (user_id: number, account_id: number) => {
 
 	const account = await deactivateAccount(account_id);
 	return account;
+};
+
+// Share an account with the caller's current group. Only owners or joint
+// owners can broadcast an account to the household — authorized users can't.
+export const shareAccount = async (
+	userId: number,
+	accountId: number,
+	groupId: number
+) => {
+	const exists = await findById(accountId);
+	if (!exists) {
+		throw new NotFoundError("Account", String(accountId));
+	}
+
+	const membership = await getAccountMembership(userId, accountId);
+	if (!membership) {
+		throw new AuthorizationError("No access to this account");
+	}
+	if (
+		membership.ownership_type !== "owner" &&
+		membership.ownership_type !== "joint"
+	) {
+		throw new AuthorizationError(
+			"Only the account owner can share this account"
+		);
+	}
+
+	await shareAccountWithGroup(accountId, groupId);
+};
+
+// Unshare an account from the caller's current group. Same access rules as share.
+export const unshareAccount = async (
+	userId: number,
+	accountId: number,
+	groupId: number
+) => {
+	const exists = await findById(accountId);
+	if (!exists) {
+		throw new NotFoundError("Account", String(accountId));
+	}
+
+	const membership = await getAccountMembership(userId, accountId);
+	if (!membership) {
+		throw new AuthorizationError("No access to this account");
+	}
+	if (
+		membership.ownership_type !== "owner" &&
+		membership.ownership_type !== "joint"
+	) {
+		throw new AuthorizationError(
+			"Only the account owner can unshare this account"
+		);
+	}
+
+	await unshareAccountFromGroup(accountId, groupId);
 };

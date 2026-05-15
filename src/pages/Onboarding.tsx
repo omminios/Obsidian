@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
-import { useRouter } from "../lib/router";
+import { useRouter, useQueryParam } from "../lib/router";
 import { api, ApiError } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
 
@@ -22,6 +22,7 @@ interface LinkedInstitution {
 
 export function Onboarding() {
 	const { navigate } = useRouter();
+	const skipInvite = useQueryParam("skipInvite") === "true";
 	const [step, setStep] = useState<Step>(1);
 	const [institutions, setInstitutions] = useState<LinkedInstitution[]>([]);
 	const [sentInvites, setSentInvites] = useState<string[]>([]);
@@ -38,13 +39,13 @@ export function Onboarding() {
 			</header>
 
 			<main className="ob-main">
-				<Stepper step={step} />
+				{!skipInvite && <Stepper step={step} />}
 
 				{step === 1 ? (
 					<PlaidStep
 						institutions={institutions}
 						onLinked={(inst) => setInstitutions((prev) => [...prev, inst])}
-						onContinue={() => setStep(2)}
+						onContinue={skipInvite ? goDashboard : () => setStep(2)}
 					/>
 				) : (
 					<InviteStep

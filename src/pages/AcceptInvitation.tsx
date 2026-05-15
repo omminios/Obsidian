@@ -24,6 +24,7 @@ interface PreviewData {
 export function AcceptInvitation() {
 	const { navigate } = useRouter();
 	const token = useQueryParam("token") || "";
+	const isNew = useQueryParam("new") === "1";
 	const [state, setState] = useState<State>("loading");
 	const [preview, setPreview] = useState<PreviewData | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -74,7 +75,7 @@ export function AcceptInvitation() {
 	};
 
 	const goRegister = () => {
-		const returnTo = encodeURIComponent(`/invitations?token=${token}`);
+		const returnTo = encodeURIComponent(`/invitations?token=${token}&new=1`);
 		navigate(`/register?returnTo=${returnTo}`);
 	};
 
@@ -410,13 +411,15 @@ export function AcceptInvitation() {
 								lineHeight: 1.5,
 							}}
 						>
-							Welcome to your new group. We'll take you to your overview now.
+							{isNew
+								? "Welcome to Obsidian. Connect your bank accounts so your group can see your shared finances."
+								: "Welcome to your new group. Head to your dashboard to get started."}
 						</p>
 						<button
 							className="btn btn-primary btn-lg btn-block"
-							onClick={() => navigate("/")}
+							onClick={() => navigate(isNew ? "/onboarding?skipInvite=true" : "/dashboard")}
 						>
-							Go to overview <IconArrow size={16} />
+							{isNew ? <>Connect accounts <IconArrow size={16} /></> : <>Go to dashboard <IconArrow size={16} /></>}
 						</button>
 					</div>
 				)}

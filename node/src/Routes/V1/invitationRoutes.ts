@@ -14,6 +14,9 @@ import {
 } from "../../services/invitationService.js";
 import { sendInvitationEmail } from "../../services/emailService.js";
 import { ValidationError } from "../../errors/index.js";
+import { findActiveMembership } from "../../repository/groupRepository.js";
+import { signAccessToken } from "../../utils/jwt.js";
+import { issueRefreshToken } from "../../services/auth/refreshService.js";
 
 const router = Router();
 
@@ -56,6 +59,30 @@ router.post(
 	validate({ body: acceptInvitationSchema }),
 	async (req, res) => {
 		await acceptInvitation(req.body.token, req.user!.userId);
+
+		// Re-issue tokens so the new groupId is live before the next request.
+		// Without this, the access token still carries the now-deleted personal
+		// groupId, which breaks exchangePublicToken's account_group_visibility insert.
+		const membership = await findActiveMembership(req.user!.userId);
+		const accessToken = signAccessToken({
+			userId: req.user!.userId,
+			groupId: membership?.group_id ?? null,
+			role: membership?.role ?? null,
+		});
+		const refreshToken = await issueRefreshToken(req.user!.userId);
+
+		res.cookie("access_token", `Bearer ${accessToken}`, {
+			httpOnly: true,
+			secure: process.env.NODE_ENV === "production",
+			sameSite: "strict",
+			maxAge: 15 * 60 * 1000,
+		});
+		res.cookie("refreshToken", refreshToken, {
+			httpOnly: true,
+			secure: process.env.NODE_ENV === "production",
+			sameSite: "strict",
+			maxAge: 7 * 24 * 60 * 60 * 1000,
+		});
 
 		res.status(200).json({ message: "Invitation accepted" });
 	}

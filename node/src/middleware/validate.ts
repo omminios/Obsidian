@@ -27,7 +27,7 @@ export const validate = (schemas: ValidationSchemas) => {
 					errors: result.error.issues,
 				});
 			}
-			req.query = result.data as typeof req.query;
+			Object.assign(req.query, result.data);
 		}
 
 		if (schemas.body) {

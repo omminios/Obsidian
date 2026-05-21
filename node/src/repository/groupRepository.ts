@@ -207,7 +207,14 @@ export const removeMember = async (
 			RETURNING *`,
 			[groupId, userId]
 		);
-		return res.rows[0];
+		const departed = res.rows[0] as GroupMembership | undefined;
+		if (departed) {
+			await runner.query(
+				`UPDATE groups SET member_count = GREATEST(member_count - 1, 0) WHERE id = $1`,
+				[groupId]
+			);
+		}
+		return departed;
 	} catch (e) {
 		throw new DatabaseError("Failed to remove member from group", {
 			groupId,

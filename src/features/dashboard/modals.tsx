@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, ApiError } from "../../lib/api";
-import { GROUP_VIEWS } from "./data";
+import type { GroupView } from "./data";
 import { IconArrow } from "../../components/icons";
 
 type ModalShellProps = {
@@ -243,14 +243,20 @@ export function SettingsModal({
 	onClose,
 	onLogout,
 	onChangePassword,
+	user,
+	groupName,
+	groupViews,
 }: {
 	onClose: () => void;
 	onLogout: () => void;
 	onChangePassword: () => void;
+	user: { first_name: string; last_name: string; email: string; username: string };
+	groupName: string;
+	groupViews: GroupView[];
 }) {
 	const [section, setSection] = useState<SettingsSection>("account");
-	const [name, setName] = useState("Morgan Park");
-	const [email, setEmail] = useState("morgan@household.com");
+	const [name, setName] = useState(`${user.first_name} ${user.last_name}`);
+	const [email, setEmail] = useState(user.email);
 	const [notif, setNotif] = useState(true);
 	const [emailNotif, setEN] = useState(true);
 
@@ -331,7 +337,7 @@ export function SettingsModal({
 							</label>
 							<label className="db-field">
 								<span className="db-field-l">Username</span>
-								<input className="input" defaultValue="morganp" />
+								<input className="input" defaultValue={user.username} />
 							</label>
 						</>
 					) : null}
@@ -340,12 +346,12 @@ export function SettingsModal({
 						<>
 							<div className="db-field">
 								<span className="db-field-l">Household name</span>
-								<input className="input" defaultValue="The Park Avenue Household" />
+								<input className="input" defaultValue={groupName} />
 							</div>
 							<div className="db-field">
 								<span className="db-field-l">Members</span>
 								<ul className="db-member-list">
-									{GROUP_VIEWS.filter((g) => g.k !== "group").map((g) => (
+									{groupViews.filter((g) => g.k !== "group").map((g) => (
 										<li key={g.k} className="db-member-li">
 											<span className={`ava ${g.col}`}>{g.ava}</span>
 											<div className="db-member-meta">

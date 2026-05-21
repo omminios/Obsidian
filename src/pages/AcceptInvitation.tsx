@@ -366,12 +366,17 @@ export function AcceptInvitation() {
 							<strong style={{ color: "var(--ink-2)" }}>
 								{preview?.invitee_email_masked ?? "a different address"}
 							</strong>
-							. You're currently signed in as a different account. Log out and sign in with the
-							correct email to accept.
+							. If that's you, log out and sign in with the correct account. Otherwise you can
+							continue to your own account — the inviter can send you a separate invitation.
 						</p>
-						<button className="btn btn-primary btn-lg btn-block" onClick={doLogout}>
-							Log out and switch accounts <IconArrow size={16} />
-						</button>
+						<div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+							<button className="btn btn-primary btn-lg btn-block" onClick={doLogout}>
+								Log out and switch accounts <IconArrow size={16} />
+							</button>
+							<button className="btn btn-ghost btn-lg btn-block" onClick={() => navigate("/dashboard")}>
+								Continue to my account
+							</button>
+						</div>
 					</div>
 				)}
 

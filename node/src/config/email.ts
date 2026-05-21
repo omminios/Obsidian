@@ -1,7 +1,10 @@
+//Email transporter for Obsidian
+
 import nodemailer from "nodemailer";
 
 const isProduction = process.env.NODE_ENV === "production";
 
+//Checks for environmnet variables for SMTP transporter
 if (isProduction) {
 	if (!process.env.SMTP_HOST) {
 		throw new Error("SMTP_HOST environment variable is not defined");
@@ -14,6 +17,8 @@ if (isProduction) {
 	}
 }
 
+// Uses production environment variables if not uses
+// static strings for mailpit.
 const transporter = nodemailer.createTransport({
 	host: process.env.SMTP_HOST || "127.0.0.1",
 	port: Number(process.env.SMTP_PORT) || 54325,

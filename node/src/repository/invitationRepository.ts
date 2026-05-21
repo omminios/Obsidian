@@ -135,6 +135,11 @@ export const acceptInvitationAndJoinGroup = async (
 		);
 
 		await client.query(
+			`UPDATE groups SET member_count = member_count + 1 WHERE id = $1`,
+			[groupId]
+		);
+
+		await client.query(
 			`UPDATE invitations
 			SET status = 'accepted', invitee_user_id = $1, accepted_at = NOW()
 			WHERE id = $2`,

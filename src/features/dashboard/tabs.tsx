@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { fmt, RANGES, type RangeKey, type Slice, type Transaction, type View, type ViewKey } from "./data";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { buildTransactions, fmt, RANGES, type AccountDisplay, type RangeKey, type Slice, type Transaction, type View, type ViewKey } from "./data";
 import { BarChart, DualLineChart, PieChart } from "./charts";
-import { api, ApiError } from "../../lib/api";
+import { api, ApiError, type TxPageFilter } from "../../lib/api";
 
 type ChartKind = "line" | "pie" | "bar";
 
@@ -229,7 +229,7 @@ export function DashboardTab({
 						</button>
 					</div>
 					<ul className="tx-list">
-						{v.tx.map((t, i) => (
+						{v.tx.slice(0, 15).map((t, i) => (
 							<TxRow key={i} t={t} />
 						))}
 					</ul>
@@ -291,31 +291,50 @@ function TxRow({ t }: { t: Transaction }) {
 	);
 }
 
-type TxFilter = "all" | "income" | "spend";
+export function TabTransactions({ view }: { v: View; view: ViewKey }) {
+	const [filter, setFilter] = useState<TxPageFilter>("all");
+	const [page, setPage] = useState(1);
+	const [txs, setTxs] = useState<Transaction[]>([]);
+	const [total, setTotal] = useState(0);
+	const [pages, setPages] = useState(1);
+	const [loading, setLoading] = useState(true);
+	const [fetchError, setFetchError] = useState<string | null>(null);
+	const prevViewRef = useRef(view);
 
-export function TabTransactions({ v, view }: { v: View; view: ViewKey }) {
-	const [filter, setFilter] = useState<TxFilter>("all");
+	useEffect(() => {
+		let cancelled = false;
+		const isViewChange = prevViewRef.current !== view;
+		prevViewRef.current = view;
+		const effectivePage = isViewChange ? 1 : page;
+		if (isViewChange) setPage(1);
 
-	const all = useMemo<Transaction[]>(() => {
-		const more = v.tx.slice(0, 4).map((t, i) => ({ ...t, d: "Apr " + (22 - i) }));
-		return [...v.tx, ...more];
-	}, [v]);
+		setLoading(true);
+		setFetchError(null);
+		api
+			.getTransactionPage(view, effectivePage, filter)
+			.then((data) => {
+				if (cancelled) return;
+				setTxs(buildTransactions(data.transactions, data.showOwner));
+				setTotal(data.total);
+				setPages(data.pages);
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				console.error("[TabTransactions] fetch failed", err);
+				setFetchError(err instanceof Error ? err.message : String(err));
+			})
+			.finally(() => { if (!cancelled) setLoading(false); });
 
-	const visible = all.filter((t) => {
-		if (filter === "all") return true;
-		if (filter === "income") return Boolean(t.positive);
-		if (filter === "spend") return !t.positive;
-		return true;
-	});
+		return () => { cancelled = true; };
+	}, [view, page, filter]);
 
-	const totalIn = all.filter((t) => t.positive).reduce((s, t) => s + t.amt, 0);
-	const totalOut = all
-		.filter((t) => !t.positive)
-		.reduce((s, t) => s + Math.abs(t.amt), 0);
-	const largest = Math.max(
-		0,
-		...all.filter((t) => !t.positive).map((t) => Math.abs(t.amt))
-	);
+	const handleFilter = (f: TxPageFilter) => {
+		setFilter(f);
+		setPage(1);
+	};
+
+	const totalIn = useMemo(() => txs.filter((t) => t.positive).reduce((s, t) => s + t.amt, 0), [txs]);
+	const totalOut = useMemo(() => txs.filter((t) => !t.positive).reduce((s, t) => s + Math.abs(t.amt), 0), [txs]);
 
 	return (
 		<div className="db-content" key={view}>
@@ -323,24 +342,24 @@ export function TabTransactions({ v, view }: { v: View; view: ViewKey }) {
 				<KPI
 					label="Money in"
 					value={fmt(totalIn, { cents: true })}
-					sub={`${all.filter((t) => t.positive).length} deposits`}
+					sub={`${txs.filter((t) => t.positive).length} on this page`}
 					accent="pos"
 				/>
 				<KPI
 					label="Money out"
 					value={fmt(totalOut, { cents: true })}
-					sub={`${all.filter((t) => !t.positive).length} purchases`}
+					sub={`${txs.filter((t) => !t.positive).length} on this page`}
 					accent="neg"
 				/>
 				<KPI
 					label="Net"
 					value={fmt(totalIn - totalOut, { signed: true, cents: true })}
-					sub="Last 30 days"
+					sub="This page"
 				/>
 				<KPI
-					label="Largest"
-					value={fmt(largest, { cents: true })}
-					sub="Single transaction"
+					label="Total"
+					value={total.toLocaleString()}
+					sub={filter === "all" ? "transactions" : `${filter} transactions`}
 				/>
 			</div>
 
@@ -349,80 +368,76 @@ export function TabTransactions({ v, view }: { v: View; view: ViewKey }) {
 					<div>
 						<h2 className="panel-h">All transactions</h2>
 						<p className="panel-sub">
-							{v.name} · last 30 days · {visible.length}{" "}
-							{visible.length === 1 ? "item" : "items"}
+							Page {page} of {pages} · {total.toLocaleString()} total
 						</p>
 					</div>
 					<div className="panel-controls">
 						<div className="seg">
 							<button
 								className={`seg-btn ${filter === "all" ? "active" : ""}`}
-								onClick={() => setFilter("all")}
+								onClick={() => handleFilter("all")}
 							>
 								All
 							</button>
 							<button
 								className={`seg-btn ${filter === "income" ? "active" : ""}`}
-								onClick={() => setFilter("income")}
+								onClick={() => handleFilter("income")}
 							>
 								Income
 							</button>
 							<button
 								className={`seg-btn ${filter === "spend" ? "active" : ""}`}
-								onClick={() => setFilter("spend")}
+								onClick={() => handleFilter("spend")}
 							>
 								Spending
 							</button>
 						</div>
 					</div>
 				</div>
-				<ul className="tx-list">
-					{visible.map((t, i) => (
-						<TxRow key={i} t={t} />
-					))}
-				</ul>
+
+				{loading ? (
+					<div className="tx-loading">Loading…</div>
+				) : fetchError ? (
+					<div className="tx-loading" style={{ color: "oklch(0.55 0.18 25)" }}>
+						Failed to load: {fetchError}
+					</div>
+				) : (
+					<ul className="tx-list">
+						{txs.map((t, i) => (
+							<TxRow key={i} t={t} />
+						))}
+						{txs.length === 0 ? (
+							<li className="tx-empty">No transactions found.</li>
+						) : null}
+					</ul>
+				)}
+
+				{pages > 1 ? (
+					<div className="tx-pagination">
+						<button
+							className="btn btn-sm btn-ghost"
+							onClick={() => setPage((p) => p - 1)}
+							disabled={page <= 1 || loading}
+						>
+							← Prev
+						</button>
+						<span className="tx-page-label">
+							{page} / {pages}
+						</span>
+						<button
+							className="btn btn-sm btn-ghost"
+							onClick={() => setPage((p) => p + 1)}
+							disabled={page >= pages || loading}
+						>
+							Next →
+						</button>
+					</div>
+				) : null}
 			</section>
 		</div>
 	);
 }
 
-type Account = {
-	n: string;
-	t: string;
-	bal: number;
-	mask: string;
-	tone: string;
-};
-
-const ACCOUNTS_BY_VIEW: Record<ViewKey, Account[]> = {
-	me: [
-		{ n: "Chase Total Checking", t: "Checking", bal: 12480.42, mask: "••4421", tone: "cat-1" },
-		{ n: "Marcus High-Yield", t: "Savings", bal: 42180.0, mask: "••8865", tone: "cat-2" },
-		{ n: "Amex Platinum", t: "Credit card", bal: -1842.1, mask: "••8810", tone: "cat-5" },
-		{ n: "Vanguard Brokerage", t: "Investment", bal: 132410.18, mask: "••2200", tone: "cat-3" },
-	],
-	jordan: [
-		{ n: "Chase Total Checking", t: "Checking", bal: 8840.2, mask: "••2210", tone: "cat-1" },
-		{ n: "Ally High-Yield", t: "Savings", bal: 18420.0, mask: "••6610", tone: "cat-2" },
-		{ n: "Amex Gold", t: "Credit card", bal: -924.5, mask: "••5544", tone: "cat-5" },
-		{ n: "Fidelity 401(k)", t: "Retirement", bal: 84210.0, mask: "••8801", tone: "cat-4" },
-	],
-	riley: [
-		{ n: "Capital One Teen Checking", t: "Checking", bal: 420.18, mask: "••1102", tone: "cat-1" },
-		{ n: "Savings Jar", t: "Savings", bal: 1840.0, mask: "••4400", tone: "cat-2" },
-	],
-	group: [
-		{ n: "Chase Total Checking", t: "Checking · Morgan", bal: 12480.42, mask: "••4421", tone: "cat-1" },
-		{ n: "Chase Total Checking", t: "Checking · Jordan", bal: 8840.2, mask: "••2210", tone: "cat-1" },
-		{ n: "Marcus High-Yield", t: "Savings · Morgan", bal: 42180.0, mask: "••8865", tone: "cat-2" },
-		{ n: "Ally High-Yield", t: "Savings · Jordan", bal: 18420.0, mask: "••6610", tone: "cat-2" },
-		{ n: "Capital One Teen", t: "Checking · Riley", bal: 420.18, mask: "••1102", tone: "cat-1" },
-		{ n: "Amex Platinum", t: "Credit · Morgan", bal: -1842.1, mask: "••8810", tone: "cat-5" },
-		{ n: "Amex Gold", t: "Credit · Jordan", bal: -924.5, mask: "••5544", tone: "cat-5" },
-		{ n: "Vanguard Brokerage", t: "Invest · Morgan", bal: 132410.18, mask: "••2200", tone: "cat-3" },
-		{ n: "Fidelity 401(k)", t: "Retire · Jordan", bal: 84210.0, mask: "••8801", tone: "cat-4" },
-	],
-};
 
 function formatSyncTime(iso: string | null): string {
 	if (!iso) return "Never synced";
@@ -436,8 +451,8 @@ function formatSyncTime(iso: string | null): string {
 	);
 }
 
-export function TabAccounts({ v, view }: { v: View; view: ViewKey }) {
-	const accts = ACCOUNTS_BY_VIEW[view] ?? ACCOUNTS_BY_VIEW.me;
+export function TabAccounts({ v, view, accounts }: { v: View; view: ViewKey; accounts: AccountDisplay[] }) {
+	const accts = accounts;
 	const total = accts.reduce((a, b) => a + b.bal, 0);
 	const cash = accts
 		.filter((a) => a.t.startsWith("Checking") || a.t.startsWith("Savings"))

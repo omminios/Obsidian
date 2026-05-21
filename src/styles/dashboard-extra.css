@@ -362,4 +362,35 @@
 
 /* Danger button */
 .btn-danger { color: oklch(0.55 0.18 25) !important; }
+
+/* Transaction pagination */
+.tx-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+.tx-page-label {
+  font-size: 13px;
+  color: var(--ink-3);
+  min-width: 48px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.tx-loading {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+.tx-empty {
+  list-style: none;
+  padding: 28px 0;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 14px;
+}
 .btn-danger:hover { background: oklch(0.96 0.04 25) !important; }

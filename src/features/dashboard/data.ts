@@ -1,3 +1,5 @@
+import type { DashboardSummary } from "../../lib/api";
+
 export type Month = { m: string; inc: number; spend: number };
 
 export type Category = { name: string; v: number; c: string };
@@ -15,156 +17,28 @@ export type Transaction = {
 export type View = {
 	name: string;
 	role: string;
-	avatar: string;
-	color: string;
 	months: Month[];
 	categories: Category[];
 	tx: Transaction[];
 };
 
-export type ViewKey = "me" | "group" | "jordan" | "riley";
+export type ViewKey = string;
 
-export const VIEWS: Record<ViewKey, View> = {
-	me: {
-		name: "Morgan Park",
-		role: "You",
-		avatar: "M",
-		color: "tx-1",
-		months: [
-			{ m: "May", inc: 8210, spend: 4820 },
-			{ m: "Jun", inc: 8210, spend: 5120 },
-			{ m: "Jul", inc: 8210, spend: 4980 },
-			{ m: "Aug", inc: 8410, spend: 5240 },
-			{ m: "Sep", inc: 8410, spend: 4710 },
-			{ m: "Oct", inc: 8410, spend: 4980 },
-			{ m: "Nov", inc: 8410, spend: 5840 },
-			{ m: "Dec", inc: 9210, spend: 6420 },
-			{ m: "Jan", inc: 8410, spend: 5180 },
-			{ m: "Feb", inc: 8410, spend: 4720 },
-			{ m: "Mar", inc: 8940, spend: 5060 },
-			{ m: "Apr", inc: 8940, spend: 3284 },
-		],
-		categories: [
-			{ name: "Housing", v: 1840, c: "cat-1" },
-			{ name: "Groceries", v: 482, c: "cat-2" },
-			{ name: "Transport", v: 286, c: "cat-3" },
-			{ name: "Subscriptions", v: 148, c: "cat-4" },
-			{ name: "Dining", v: 214, c: "cat-5" },
-			{ name: "Other", v: 314, c: "cat-6" },
-		],
-		tx: [
-			{ d: "Apr 28", name: "Whole Foods Market", cat: "Groceries", amt: -84.2, acct: "Chase ••4421" },
-			{ d: "Apr 27", name: "Apple", cat: "Subscriptions", amt: -9.99, acct: "Amex ••8810" },
-			{ d: "Apr 26", name: "Acme Corp · Payroll", cat: "Income", amt: 4210.0, acct: "Chase ••4421", positive: true },
-			{ d: "Apr 25", name: "Shell", cat: "Transport", amt: -48.1, acct: "Amex ••8810" },
-			{ d: "Apr 25", name: "Spotify", cat: "Subscriptions", amt: -16.99, acct: "Amex ••8810" },
-			{ d: "Apr 24", name: "Trader Joe’s", cat: "Groceries", amt: -52.84, acct: "Chase ••4421" },
-		],
-	},
-	group: {
-		name: "The Park Avenue Household",
-		role: "Group",
-		avatar: "P",
-		color: "tx-3",
-		months: [
-			{ m: "May", inc: 14820, spend: 8420 },
-			{ m: "Jun", inc: 14820, spend: 8980 },
-			{ m: "Jul", inc: 14820, spend: 8210 },
-			{ m: "Aug", inc: 15240, spend: 9120 },
-			{ m: "Sep", inc: 15240, spend: 8540 },
-			{ m: "Oct", inc: 15240, spend: 9210 },
-			{ m: "Nov", inc: 15240, spend: 10240 },
-			{ m: "Dec", inc: 16640, spend: 11820 },
-			{ m: "Jan", inc: 15240, spend: 9420 },
-			{ m: "Feb", inc: 15240, spend: 8780 },
-			{ m: "Mar", inc: 16140, spend: 9120 },
-			{ m: "Apr", inc: 16140, spend: 6890 },
-		],
-		categories: [
-			{ name: "Housing", v: 3200, c: "cat-1" },
-			{ name: "Groceries", v: 920, c: "cat-2" },
-			{ name: "Transport", v: 540, c: "cat-3" },
-			{ name: "Subscriptions", v: 246, c: "cat-4" },
-			{ name: "Dining", v: 610, c: "cat-5" },
-			{ name: "Childcare", v: 1100, c: "cat-6" },
-			{ name: "Other", v: 274, c: "cat-7" },
-		],
-		tx: [
-			{ d: "Apr 28", name: "Whole Foods Market", cat: "Groceries", amt: -84.2, acct: "Morgan · Chase ••4421", who: "M" },
-			{ d: "Apr 28", name: "PG&E", cat: "Housing", amt: -184.4, acct: "Jordan · Chase ••2210", who: "J" },
-			{ d: "Apr 27", name: "Apple", cat: "Subscriptions", amt: -9.99, acct: "Morgan · Amex ••8810", who: "M" },
-			{ d: "Apr 27", name: "Acme · Payroll", cat: "Income", amt: 4210.0, acct: "Morgan · Chase ••4421", who: "M", positive: true },
-			{ d: "Apr 26", name: "Stripe · Payroll", cat: "Income", amt: 5120.0, acct: "Jordan · Chase ••2210", who: "J", positive: true },
-			{ d: "Apr 25", name: "Shell", cat: "Transport", amt: -48.1, acct: "Morgan · Amex ••8810", who: "M" },
-			{ d: "Apr 24", name: "Bright Horizons", cat: "Childcare", amt: -420.0, acct: "Jordan · Chase ••2210", who: "J" },
-		],
-	},
-	jordan: {
-		name: "Jordan Park",
-		role: "Spouse",
-		avatar: "J",
-		color: "tx-2",
-		months: [
-			{ m: "May", inc: 6610, spend: 3600 },
-			{ m: "Jun", inc: 6610, spend: 3860 },
-			{ m: "Jul", inc: 6610, spend: 3230 },
-			{ m: "Aug", inc: 6830, spend: 3880 },
-			{ m: "Sep", inc: 6830, spend: 3830 },
-			{ m: "Oct", inc: 6830, spend: 4230 },
-			{ m: "Nov", inc: 6830, spend: 4400 },
-			{ m: "Dec", inc: 7430, spend: 5400 },
-			{ m: "Jan", inc: 6830, spend: 4240 },
-			{ m: "Feb", inc: 6830, spend: 4060 },
-			{ m: "Mar", inc: 7200, spend: 4060 },
-			{ m: "Apr", inc: 7200, spend: 3606 },
-		],
-		categories: [
-			{ name: "Housing", v: 1360, c: "cat-1" },
-			{ name: "Childcare", v: 1100, c: "cat-6" },
-			{ name: "Groceries", v: 438, c: "cat-2" },
-			{ name: "Transport", v: 254, c: "cat-3" },
-			{ name: "Dining", v: 396, c: "cat-5" },
-			{ name: "Subscriptions", v: 58, c: "cat-4" },
-		],
-		tx: [
-			{ d: "Apr 28", name: "PG&E", cat: "Housing", amt: -184.4, acct: "Chase ••2210" },
-			{ d: "Apr 26", name: "Stripe · Payroll", cat: "Income", amt: 5120.0, acct: "Chase ••2210", positive: true },
-			{ d: "Apr 24", name: "Bright Horizons", cat: "Childcare", amt: -420.0, acct: "Chase ••2210" },
-			{ d: "Apr 23", name: "Uber", cat: "Transport", amt: -22.4, acct: "Amex ••5544" },
-			{ d: "Apr 22", name: "Tartine Bakery", cat: "Dining", amt: -38.9, acct: "Amex ••5544" },
-		],
-	},
-	riley: {
-		name: "Riley Park",
-		role: "Viewer",
-		avatar: "R",
-		color: "tx-4",
-		months: [
-			{ m: "May", inc: 0, spend: 380 },
-			{ m: "Jun", inc: 0, spend: 410 },
-			{ m: "Jul", inc: 0, spend: 320 },
-			{ m: "Aug", inc: 0, spend: 510 },
-			{ m: "Sep", inc: 0, spend: 380 },
-			{ m: "Oct", inc: 0, spend: 470 },
-			{ m: "Nov", inc: 0, spend: 540 },
-			{ m: "Dec", inc: 0, spend: 720 },
-			{ m: "Jan", inc: 0, spend: 410 },
-			{ m: "Feb", inc: 0, spend: 360 },
-			{ m: "Mar", inc: 0, spend: 410 },
-			{ m: "Apr", inc: 0, spend: 290 },
-		],
-		categories: [
-			{ name: "Allowance", v: 120, c: "cat-3" },
-			{ name: "Dining", v: 84, c: "cat-5" },
-			{ name: "Subscriptions", v: 14, c: "cat-4" },
-			{ name: "Other", v: 72, c: "cat-6" },
-		],
-		tx: [
-			{ d: "Apr 28", name: "Chipotle", cat: "Dining", amt: -14.2, acct: "Visa ••1102" },
-			{ d: "Apr 26", name: "Spotify", cat: "Subscriptions", amt: -5.99, acct: "Visa ••1102" },
-			{ d: "Apr 24", name: "Allowance", cat: "Allowance", amt: 120.0, acct: "Visa ••1102", positive: true },
-		],
-	},
+export type AccountDisplay = {
+	n: string;
+	t: string;
+	bal: number;
+	mask: string;
+	tone: string;
+};
+
+export type GroupView = {
+	k: string;
+	name: string;
+	sub: string;
+	ava: string;
+	col: string;
+	role: string;
 };
 
 export type RangeKey = "1M" | "3M" | "6M" | "1Y";
@@ -201,18 +75,174 @@ export function fmt(n: number, opts: { signed?: boolean; cents?: boolean } = {})
 	return (n < 0 ? "−" : "") + "$" + s;
 }
 
-export type GroupView = {
-	k: ViewKey;
-	name: string;
-	sub: string;
-	ava: string;
-	col: string;
-	role: string;
-};
+// ============================================================
+// Builder helpers — transform API data into dashboard shapes
+// ============================================================
 
-export const GROUP_VIEWS: GroupView[] = [
-	{ k: "group", name: "Household", sub: "Everyone", ava: "P", col: "ava-3", role: "Group" },
-	{ k: "me", name: "Morgan Park", sub: "You · leader", ava: "M", col: "ava-1", role: "Leader" },
-	{ k: "jordan", name: "Jordan Park", sub: "Member", ava: "J", col: "ava-2", role: "Member" },
-	{ k: "riley", name: "Riley Park", sub: "Viewer", ava: "R", col: "ava-4", role: "Viewer" },
-];
+const CAT_COLORS = ["cat-1", "cat-2", "cat-3", "cat-4", "cat-5", "cat-6"] as const;
+const AVA_COLORS = ["ava-1", "ava-2", "ava-3", "ava-4"] as const;
+
+function cap(s: string): string {
+	return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function accountTone(type: string): string {
+	switch (type) {
+		case "checking": return "cat-1";
+		case "savings": return "cat-2";
+		case "investment": return "cat-3";
+		case "credit": return "cat-5";
+		case "loan": return "cat-6";
+		default: return "cat-1";
+	}
+}
+
+function effectiveBal(bal: number | null, type: string): number {
+	const raw = bal ?? 0;
+	return type === "credit" || type === "loan" ? -raw : raw;
+}
+
+function buildMonths(monthly: Array<{ month: string; income: number; spending: number }>): Month[] {
+	return monthly.map((m) => ({
+		m: m.month.split(" ")[0],
+		inc: m.income,
+		spend: m.spending,
+	}));
+}
+
+function buildCategories(categories: Array<{ category: string; total: number }>): Category[] {
+	return categories.map((c, i) => ({
+		name: c.category,
+		v: c.total,
+		c: CAT_COLORS[i % CAT_COLORS.length],
+	}));
+}
+
+function formatTxDate(isoDate: string): string {
+	// Append time to avoid UTC-to-local shift on date-only strings
+	const d = new Date(isoDate + "T12:00:00");
+	return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+export function buildTransactions(
+	txs: DashboardSummary["my_transactions"] | DashboardSummary["group_transactions"],
+	showOwner: boolean
+): Transaction[] {
+	return txs.map((t) => {
+		const gt = t as DashboardSummary["group_transactions"][number];
+		const institution = t.institution_name ?? t.account_name;
+		const mask = t.last_four ? ` ••${t.last_four}` : "";
+		const acctBase = institution + mask;
+		const acct = showOwner && gt.owner_first_name
+			? `${gt.owner_first_name} · ${acctBase}`
+			: acctBase;
+		return {
+			d: formatTxDate(t.transaction_date),
+			name: t.merchant_name || t.description || "Unknown",
+			cat: t.category || "Other",
+			amt: t.amount,
+			acct,
+			positive: t.amount > 0,
+			who: showOwner && gt.owner_first_name ? gt.owner_first_name[0] : undefined,
+		};
+	});
+}
+
+export function buildDashboardView(summary: DashboardSummary, viewKey: string): View {
+	if (viewKey === "group") {
+		return {
+			name: summary.group?.name ?? "Household",
+			role: "Group",
+			months: buildMonths(summary.group_monthly),
+			categories: buildCategories(summary.group_categories),
+			tx: buildTransactions(summary.group_transactions, true),
+		};
+	}
+
+	if (viewKey === "me") {
+		const u = summary.user;
+		return {
+			name: `${u.first_name} ${u.last_name}`,
+			role: "You",
+			months: buildMonths(summary.my_monthly),
+			categories: buildCategories(summary.my_categories),
+			tx: buildTransactions(summary.my_transactions, false),
+		};
+	}
+
+	// per-member view: key = "member-{id}"
+	const memberId = parseInt(viewKey.replace("member-", ""), 10);
+	const member = summary.members.find((m) => m.id === memberId);
+	const memberTxs = summary.group_transactions.filter((t) => t.owner_id === memberId);
+
+	return {
+		name: member ? `${member.first_name} ${member.last_name}` : "Member",
+		role: member?.role ? cap(member.role) : "Member",
+		months: buildMonths(member?.monthly ?? []),
+		categories: buildCategories(member?.categories ?? []),
+		tx: buildTransactions(memberTxs, false),
+	};
+}
+
+export function buildAccountsForView(summary: DashboardSummary, viewKey: string): AccountDisplay[] {
+	if (viewKey === "group") {
+		return summary.group_accounts.map((a) => ({
+			n: a.account_name,
+			t: `${cap(a.account_type)} · ${a.owner_first_name}`,
+			bal: effectiveBal(a.balance_current, a.account_type),
+			mask: a.last_four ? `••${a.last_four}` : "—",
+			tone: accountTone(a.account_type),
+		}));
+	}
+
+	if (viewKey === "me") {
+		return summary.my_accounts.map((a) => ({
+			n: a.account_name,
+			t: cap(a.account_type),
+			bal: effectiveBal(a.balance_current, a.account_type),
+			mask: a.last_four ? `••${a.last_four}` : "—",
+			tone: accountTone(a.account_type),
+		}));
+	}
+
+	const memberId = parseInt(viewKey.replace("member-", ""), 10);
+	return summary.group_accounts
+		.filter((a) => a.owner_id === memberId)
+		.map((a) => ({
+			n: a.account_name,
+			t: cap(a.account_type),
+			bal: effectiveBal(a.balance_current, a.account_type),
+			mask: a.last_four ? `••${a.last_four}` : "—",
+			tone: accountTone(a.account_type),
+		}));
+}
+
+export function buildGroupViews(summary: DashboardSummary): GroupView[] {
+	const views: GroupView[] = [];
+
+	// Only show the household aggregate view when there are multiple members
+	if (summary.members.length > 1) {
+		views.push({
+			k: "group",
+			name: summary.group?.name ?? "Household",
+			sub: "Everyone",
+			ava: (summary.group?.name?.[0] ?? "H").toUpperCase(),
+			col: "ava-3",
+			role: "Group",
+		});
+	}
+
+	summary.members.forEach((m, i) => {
+		const isMe = m.id === summary.user.id;
+		views.push({
+			k: isMe ? "me" : `member-${m.id}`,
+			name: `${m.first_name} ${m.last_name}`,
+			sub: isMe ? "You" : m.role,
+			ava: (m.first_name[0] ?? "?").toUpperCase(),
+			col: AVA_COLORS[i % AVA_COLORS.length],
+			role: m.role,
+		});
+	});
+
+	return views;
+}

@@ -10,6 +10,8 @@ import logoutRoutes from "./logoutRoute.js";
 import passwordResetRoutes from "./passwordResetRoutes.js";
 import invitationRoutes from "./invitationRoutes.js";
 import plaidRoutes from "./plaidRoutes.js";
+import sessionRoute from "./sessionRoute.js";
+import dashboardRoutes from "./dashboardRoutes.js";
 
 const router = Router();
 
@@ -18,6 +20,7 @@ router.use("/register", registerRoutes);
 router.use("/login", loginRoutes);
 router.use("/logout", logoutRoutes);
 router.use("/password-reset", passwordResetRoutes);
+router.use("/session", sessionRoute);
 
 // Authenticated routes
 router.use("/users", userRoutes);
@@ -26,6 +29,7 @@ router.use("/groups", groupRoutes);
 router.use("/accounts", accountRoutes);
 router.use("/invitations", invitationRoutes);
 router.use("/plaid", plaidRoutes);
+router.use("/dashboard", dashboardRoutes);
 
 // Admin routes
 router.use("/admin", adminRoutes);

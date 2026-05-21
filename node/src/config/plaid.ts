@@ -1,3 +1,5 @@
+//Plaid configuration
+
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
 if (!process.env.plaid_client_id) {
@@ -7,6 +9,7 @@ if (!process.env.plaid_sandbox_secret) {
 	throw new Error("plaid_sandbox_secret environment variable is not defined");
 }
 
+// plaid object
 const configuration = new Configuration({
 	basePath: PlaidEnvironments.sandbox,
 	baseOptions: {
@@ -17,4 +20,5 @@ const configuration = new Configuration({
 	},
 });
 
+//new plaid client per call
 export const plaidClient = new PlaidApi(configuration);

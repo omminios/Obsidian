@@ -3,6 +3,7 @@ import { findByEmail } from "../../repository/userRepository.js";
 import { signAccessToken } from "../../utils/jwt.js";
 import { AuthenticationError } from "../../errors/index.js";
 import { issueRefreshToken } from "./refreshService.js";
+import { revokeAllUserRefreshTokens } from "../../repository/refreshTokenRepository.js";
 import { findActiveMembership } from "../../repository/groupRepository.js";
 
 interface loginCredentials {
@@ -29,6 +30,7 @@ export const loginUser = async (payload: loginCredentials) => {
 		role: membership?.role ?? null,
 	});
 
+	await revokeAllUserRefreshTokens(userData.id);
 	const refreshToken = await issueRefreshToken(userData.id);
 
 	return { accessToken, refreshToken };

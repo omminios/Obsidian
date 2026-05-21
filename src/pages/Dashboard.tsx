@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Wordmark } from "../components/Wordmark";
 import { IconBolt, IconChart, IconShield } from "../components/icons";
 import { useRouter } from "../lib/router";
-import { api } from "../lib/api";
+import { api, type DashboardSummary } from "../lib/api";
 import {
-	GROUP_VIEWS,
+	buildAccountsForView,
+	buildDashboardView,
+	buildGroupViews,
 	sliceMonths,
-	VIEWS,
+	type GroupView,
 	type RangeKey,
 	type ViewKey,
 } from "../features/dashboard/data";
@@ -29,15 +31,45 @@ const TABS: TabDef[] = [
 
 type ModalKind = "invite" | "settings" | null;
 
+const EMPTY_SUMMARY: DashboardSummary = {
+	user: { id: 0, first_name: "", last_name: "", username: "", email: "" },
+	group: null,
+	members: [],
+	my_accounts: [],
+	group_accounts: [],
+	my_transactions: [],
+	group_transactions: [],
+	my_monthly: [],
+	group_monthly: [],
+	my_categories: [],
+	group_categories: [],
+};
+
 export function Dashboard() {
 	const { navigate } = useRouter();
 	const [tab, setTab] = useState<TabKey>("dashboard");
 	const [view, setView] = useState<ViewKey>("me");
 	const [range, setRange] = useState<RangeKey>("6M");
 	const [modal, setModal] = useState<ModalKind>(null);
+	const [summary, setSummary] = useState<DashboardSummary>(EMPTY_SUMMARY);
+	const [loading, setLoading] = useState(true);
 
-	const v = VIEWS[view];
-	const slice = useMemo(() => sliceMonths(v, range), [v, range]);
+	useEffect(() => {
+		api.getDashboardSummary()
+			.then((data) => {
+				setSummary(data);
+				// Default to "group" view if the user is in a shared household,
+				// otherwise stay on "me"
+				if (data.members.length > 1) setView("group");
+			})
+			.catch((err) => console.error("[Dashboard] Failed to load summary:", err))
+			.finally(() => setLoading(false));
+	}, []);
+
+	const groupViews = useMemo(() => buildGroupViews(summary), [summary]);
+	const currentView = useMemo(() => buildDashboardView(summary, view), [summary, view]);
+	const currentAccounts = useMemo(() => buildAccountsForView(summary, view), [summary, view]);
+	const slice = useMemo(() => sliceMonths(currentView, range), [currentView, range]);
 
 	const handleLogout = async () => {
 		try {
@@ -53,6 +85,14 @@ export function Dashboard() {
 		navigate("/forgot-password");
 	};
 
+	if (loading) {
+		return (
+			<div className="dboard">
+				<div className="dboard-loading">Loading…</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="dboard">
 			<DBSidebar
@@ -60,17 +100,19 @@ export function Dashboard() {
 				setTab={setTab}
 				view={view}
 				setView={setView}
+				groupViews={groupViews}
+				user={summary.user}
 				onInvite={() => setModal("invite")}
 				onSettings={() => setModal("settings")}
 				onLogout={handleLogout}
 			/>
 
 			<main className="dboard-main">
-				<DBTopBar tab={tab} view={view} />
+				<DBTopBar tab={tab} view={view} groupViews={groupViews} />
 
 				{tab === "dashboard" ? (
 					<DashboardTab
-						v={v}
+						v={currentView}
 						slice={slice}
 						range={range}
 						setRange={setRange}
@@ -78,8 +120,10 @@ export function Dashboard() {
 						onViewAllTransactions={() => setTab("transactions")}
 					/>
 				) : null}
-				{tab === "transactions" ? <TabTransactions v={v} view={view} /> : null}
-				{tab === "accounts" ? <TabAccounts v={v} view={view} /> : null}
+				{tab === "transactions" ? <TabTransactions v={currentView} view={view} /> : null}
+				{tab === "accounts" ? (
+					<TabAccounts v={currentView} view={view} accounts={currentAccounts} />
+				) : null}
 			</main>
 
 			{modal === "invite" ? <InviteModal onClose={() => setModal(null)} /> : null}
@@ -91,6 +135,9 @@ export function Dashboard() {
 						void handleLogout();
 					}}
 					onChangePassword={handleChangePassword}
+					user={summary.user}
+					groupName={summary.group?.name ?? "My Household"}
+					groupViews={groupViews}
 				/>
 			) : null}
 		</div>
@@ -102,6 +149,8 @@ function DBSidebar({
 	setTab,
 	view,
 	setView,
+	groupViews,
+	user,
 	onInvite,
 	onSettings,
 	onLogout,
@@ -110,6 +159,8 @@ function DBSidebar({
 	setTab: (t: TabKey) => void;
 	view: ViewKey;
 	setView: (v: ViewKey) => void;
+	groupViews: GroupView[];
+	user: DashboardSummary["user"];
 	onInvite: () => void;
 	onSettings: () => void;
 	onLogout: () => void;
@@ -125,6 +176,11 @@ function DBSidebar({
 		document.addEventListener("mousedown", onDoc);
 		return () => document.removeEventListener("mousedown", onDoc);
 	}, [menuOpen]);
+
+	const userInitial = user.first_name?.[0]?.toUpperCase() ?? "?";
+	const displayName = user.first_name && user.last_name
+		? `${user.first_name} ${user.last_name}`
+		: user.username || "You";
 
 	return (
 		<aside className="db-side">
@@ -170,7 +226,7 @@ function DBSidebar({
 				</div>
 
 				<div className="db-side-rows">
-					{GROUP_VIEWS.map((g) => (
+					{groupViews.map((g) => (
 						<button
 							key={g.k}
 							className={`db-side-row db-side-row-btn ${view === g.k ? "active" : ""}`}
@@ -290,10 +346,10 @@ function DBSidebar({
 					aria-haspopup="menu"
 					aria-expanded={menuOpen}
 				>
-					<span className="ava ava-1">M</span>
+					<span className="ava ava-1">{userInitial}</span>
 					<div className="db-side-row-meta">
-						<div className="db-side-row-name">Morgan Park</div>
-						<div className="db-side-row-sub">morgan@household.com</div>
+						<div className="db-side-row-name">{displayName}</div>
+						<div className="db-side-row-sub">{user.email}</div>
 					</div>
 					<span className="db-side-foot-caret" aria-hidden>
 						<svg
@@ -317,9 +373,17 @@ function DBSidebar({
 	);
 }
 
-function DBTopBar({ tab, view }: { tab: TabKey; view: ViewKey }) {
+function DBTopBar({
+	tab,
+	view,
+	groupViews,
+}: {
+	tab: TabKey;
+	view: ViewKey;
+	groupViews: GroupView[];
+}) {
 	const tabLabel = TABS.find((t) => t.k === tab)?.l ?? "Dashboard";
-	const cur = GROUP_VIEWS.find((g) => g.k === view) ?? GROUP_VIEWS[0];
+	const cur = groupViews.find((g) => g.k === view) ?? groupViews[0];
 	const today = new Date().toLocaleDateString("en-US", {
 		month: "long",
 		day: "numeric",
@@ -336,9 +400,9 @@ function DBTopBar({ tab, view }: { tab: TabKey; view: ViewKey }) {
 			<div className="db-top-right">
 				<div className="db-top-viewing">
 					<span className="db-top-viewing-l">Viewing</span>
-					<span className={`ava ava-sm ${cur.col}`}>{cur.ava}</span>
-					<span className="db-top-viewing-n">{cur.name}</span>
-					<span className="db-top-viewing-r">{cur.role}</span>
+					<span className={`ava ava-sm ${cur?.col ?? ""}`}>{cur?.ava ?? "?"}</span>
+					<span className="db-top-viewing-n">{cur?.name ?? ""}</span>
+					<span className="db-top-viewing-r">{cur?.role ?? ""}</span>
 				</div>
 
 				<button className="db-top-iconbtn" title="Notifications" aria-label="Notifications">

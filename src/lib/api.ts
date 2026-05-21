@@ -1,3 +1,87 @@
+export type DashboardSummary = {
+	user: {
+		id: number;
+		first_name: string;
+		last_name: string;
+		username: string;
+		email: string;
+	};
+	group: {
+		id: number;
+		name: string;
+		last_synced_at: string | null;
+		is_syncing: boolean;
+	} | null;
+	members: Array<{
+		id: number;
+		first_name: string;
+		last_name: string;
+		role: string;
+		monthly: Array<{ month: string; income: number; spending: number }>;
+		categories: Array<{ category: string; total: number }>;
+	}>;
+	my_accounts: Array<{
+		id: number;
+		account_name: string;
+		account_type: string;
+		institution_name: string | null;
+		last_four: string | null;
+		balance_current: number | null;
+		balance_available: number | null;
+	}>;
+	group_accounts: Array<{
+		id: number;
+		account_name: string;
+		account_type: string;
+		institution_name: string | null;
+		last_four: string | null;
+		balance_current: number | null;
+		balance_available: number | null;
+		owner_id: number;
+		owner_first_name: string;
+		owner_last_name: string;
+	}>;
+	my_transactions: Array<{
+		id: number;
+		transaction_date: string;
+		amount: number;
+		description: string | null;
+		category: string | null;
+		merchant_name: string | null;
+		account_name: string;
+		institution_name: string | null;
+		last_four: string | null;
+	}>;
+	group_transactions: Array<{
+		id: number;
+		transaction_date: string;
+		amount: number;
+		description: string | null;
+		category: string | null;
+		merchant_name: string | null;
+		account_name: string;
+		institution_name: string | null;
+		last_four: string | null;
+		owner_id: number;
+		owner_first_name: string;
+		owner_last_name: string;
+	}>;
+	my_monthly: Array<{ month: string; income: number; spending: number }>;
+	group_monthly: Array<{ month: string; income: number; spending: number }>;
+	my_categories: Array<{ category: string; total: number }>;
+	group_categories: Array<{ category: string; total: number }>;
+};
+
+export type TxPageFilter = "all" | "income" | "spend";
+
+export type TransactionPageResult = {
+	transactions: DashboardSummary["group_transactions"];
+	total: number;
+	page: number;
+	pages: number;
+	showOwner: boolean;
+};
+
 type ApiErrorBody = {
 	status?: string;
 	errorCode?: string;
@@ -142,5 +226,13 @@ export const api = {
 	getSyncStatus: () =>
 		request<{ last_synced_at: string | null; is_syncing: boolean }>(
 			"/api/v1/plaid/sync-status"
+		),
+
+	getDashboardSummary: () =>
+		request<DashboardSummary>("/api/v1/dashboard/summary"),
+
+	getTransactionPage: (view: string, page: number, filter: TxPageFilter) =>
+		request<TransactionPageResult>(
+			`/api/v1/dashboard/transactions?view=${encodeURIComponent(view)}&page=${page}&filter=${filter}`
 		),
 };

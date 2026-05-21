@@ -44,7 +44,7 @@ router.post(
 );
 
 router.post("/sync", async (req, res) => {
-	const { userId, groupId } = req.user!;
+	const { groupId } = req.user!;
 	if (!groupId) {
 		res.status(400).json({ message: "No active group" });
 		return;
@@ -68,7 +68,7 @@ router.post("/sync", async (req, res) => {
 			const r = await syncTransactions(
 				item.id,
 				token,
-				userId,
+				item.user_id,
 				item.transactions_cursor
 			);
 			totalAdded += r.added;

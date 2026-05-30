@@ -42,3 +42,11 @@ export const createAccountSchema = z
 export const deleteAccountSchema = z.object({
 	account_id: z.number().int().positive(),
 });
+
+// Query params for an account's paginated transaction list.
+// Mirrors dashboardTxQuerySchema minus the `view` field — a single account is
+// already the scope, so only page + amount filter are needed.
+export const accountTxQuerySchema = z.object({
+	page: z.coerce.number().int().min(1).default(1),
+	filter: z.enum(["all", "income", "spend"]).default("all"),
+});

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
 	getAccountById,
+	getAccountTransactions,
 	createAccount,
 	removeAccount,
 	shareAccount,
@@ -13,6 +14,7 @@ import { idParamSchema } from "../../schemas/common.js";
 import {
 	createAccountSchema,
 	deleteAccountSchema,
+	accountTxQuerySchema,
 } from "../../schemas/accountSchemas.js";
 
 const router = Router();
@@ -28,6 +30,25 @@ router.get("/:id", validate({ params: idParamSchema }), async (req, res) => {
 		data,
 	});
 });
+
+// Get an account's transactions (paginated). Access mirrors the dashboard: the
+// caller must be a member of the account or it must be shared with their group.
+router.get(
+	"/:id/transactions",
+	validate({ params: idParamSchema, query: accountTxQuerySchema }),
+	async (req, res) => {
+		const { page, filter } =
+			req.query as unknown as typeof accountTxQuerySchema._output;
+		const result = await getAccountTransactions(
+			req.user!.userId,
+			req.user!.groupId,
+			Number(req.params.id),
+			page,
+			filter
+		);
+		res.status(200).json(result);
+	}
+);
 
 // Create new account
 router.post("/", validate({ body: createAccountSchema }), async (req, res) => {

@@ -70,6 +70,15 @@ export default defineConfig({
 					],
 				},
 			},
+			{
+				test: {
+					name: "accountTransactions",
+					testTimeout: 60000,
+					include: [
+						"node/src/tests/service/accountService.test.ts",
+					],
+				},
+			},
 		],
 	},
 });

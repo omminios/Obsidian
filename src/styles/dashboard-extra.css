@@ -394,3 +394,131 @@
   font-size: 14px;
 }
 .btn-danger:hover { background: oklch(0.96 0.04 25) !important; }
+
+/* =====================================================
+   Accounts — collapsible type groups (dropdowns)
+   ===================================================== */
+.acct-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.acct-group {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.acct-group.open {
+  border-color: var(--line);
+  box-shadow: 0 1px 2px rgba(15,17,25,0.04);
+}
+.acct-group-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 12px 1fr auto 16px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 120ms ease;
+}
+.acct-group-head:hover { background: var(--surface-2); }
+.acct-group-mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.acct-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.acct-group-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.acct-group-count {
+  font-size: 12px;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+.acct-group-total {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.acct-group-total.neg { color: var(--danger); }
+.acct-group-chevron {
+  color: var(--ink-4);
+  transition: transform 180ms ease;
+}
+.acct-group.open .acct-group-chevron { transform: rotate(180deg); }
+
+.acct-group-body {
+  padding: 0 16px 6px;
+  border-top: 1px solid var(--line-soft);
+}
+.acct-subgroup { padding-top: 4px; }
+.acct-subgroup-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 4px 4px;
+}
+.acct-subgroup-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
+}
+.acct-subgroup-total {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Clickable account row — opens a modal with the account's transactions.
+   Overrides the plain .acct-li grid to add a trailing affordance chevron.
+   The .acct-li.acct-li-btn compound selector wins over .acct-li regardless
+   of stylesheet load order. */
+.acct-li.acct-li-btn {
+  grid-template-columns: 40px 1fr auto 16px;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 120ms ease;
+}
+.acct-list > li:last-child .acct-li-btn { border-bottom: 0; }
+.acct-li-btn:hover { background: var(--surface-2); }
+.acct-li-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.acct-li-chevron {
+  color: var(--ink-4);
+  transition: transform 140ms ease, color 140ms ease;
+}
+.acct-li-btn:hover .acct-li-chevron {
+  color: var(--ink-3);
+  transform: translateX(2px);
+}
+
+/* Account transactions modal */
+.acct-tx-filter { margin-bottom: 16px; }

@@ -4,12 +4,19 @@ import {
 	newAccount,
 	deactivateAccount,
 	getAccountMembership,
+	isAccountVisibleToGroup,
 	shareAccountWithGroup,
 	unshareAccountFromGroup,
 } from "../repository/accountRepository.js";
+import {
+	getAccountTransactionsPaged,
+	type TxFilter,
+} from "../repository/dashboardRepository.js";
 import { TablesInsert } from "../config/types.js";
 
 import { NotFoundError, AuthorizationError } from "../errors/index.js";
+
+const ACCOUNT_TX_PAGE_LIMIT = 25;
 
 // Get all accounts
 export const getAccounts = async () => {
@@ -30,6 +37,43 @@ export const getAccountById = async (userId: number, accountId: number) => {
 	}
 
 	return account;
+};
+
+// List a single account's transactions (paginated). Access is granted if the
+// user is a member of the account OR the account is shared with their current
+// group — the same accounts they can already see on the dashboard.
+export const getAccountTransactions = async (
+	userId: number,
+	groupId: number | null | undefined,
+	accountId: number,
+	page: number,
+	filter: TxFilter
+) => {
+	const account = await findById(accountId);
+	if (!account) {
+		throw new NotFoundError("Account", String(accountId));
+	}
+
+	const membership = await getAccountMembership(userId, accountId);
+	const visible = groupId
+		? await isAccountVisibleToGroup(accountId, groupId)
+		: false;
+	if (!membership && !visible) {
+		throw new AuthorizationError("No access to this account");
+	}
+
+	const { transactions, total } = await getAccountTransactionsPaged(
+		accountId,
+		page,
+		ACCOUNT_TX_PAGE_LIMIT,
+		filter
+	);
+	return {
+		transactions,
+		total,
+		page,
+		pages: Math.max(1, Math.ceil(total / ACCOUNT_TX_PAGE_LIMIT)),
+	};
 };
 
 // Create a new account need to add plaid_account_id for unique account ID's

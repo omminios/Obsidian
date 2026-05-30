@@ -2,10 +2,10 @@ import { CountryCode, AccountBase } from "plaid";
 import { pool } from "../../config/database.js";
 import { plaidClient } from "../../config/plaid.js";
 import { encryptToken } from "../../utils/plaidCrypto.js";
-import { insertPlaidItem, insertPlaidAccount } from "../../repository/plaidItemRepository.js";
+import { insertPlaidItem, insertPlaidAccount, findByUserId } from "../../repository/plaidItemRepository.js";
 import { sanitizePlaidAccountType } from "./subtypeMap.js";
 import { syncTransactions } from "./transactionsSyncService.js";
-import { ExternalServiceError, DatabaseError } from "../../errors/index.js";
+import { ExternalServiceError, DatabaseError, ConflictError } from "../../errors/index.js";
 
 export interface LinkedAccount {
 	id: number;
@@ -70,6 +70,22 @@ export const exchangePublicToken = async (
 			institutionName = instRes.data.institution.name;
 		} catch {
 			// non-fatal: we'll just store null
+		}
+	}
+
+	// 3b. Reject a duplicate link of the same institution for this user. Without
+	// this, re-linking a bank creates a second plaid_item plus a fresh set of
+	// accounts (Plaid issues new account_ids each link, so the UNIQUE constraint
+	// on plaid_account_id never catches it), leaving the dashboard showing every
+	// account twice. Guard requires an institution_id; sandbox occasionally omits
+	// it, in which case we can't dedupe and fall through.
+	if (institutionId) {
+		const existing = await findByUserId(userId);
+		if (existing.some((item) => item.institution_id === institutionId)) {
+			throw new ConflictError("This institution is already linked to your account.", {
+				institutionId,
+				institutionName,
+			});
 		}
 	}
 

@@ -84,6 +84,13 @@ export type TransactionPageResult = {
 	showOwner: boolean;
 };
 
+export type AccountTransactionPageResult = {
+	transactions: DashboardSummary["my_transactions"];
+	total: number;
+	page: number;
+	pages: number;
+};
+
 type ApiErrorBody = {
 	status?: string;
 	errorCode?: string;
@@ -237,5 +244,10 @@ export const api = {
 	getTransactionPage: (view: string, page: number, filter: TxPageFilter) =>
 		request<TransactionPageResult>(
 			`/api/v1/dashboard/transactions?view=${encodeURIComponent(view)}&page=${page}&filter=${filter}`
+		),
+
+	getAccountTransactionPage: (accountId: number, page: number, filter: TxPageFilter) =>
+		request<AccountTransactionPageResult>(
+			`/api/v1/accounts/${accountId}/transactions?page=${page}&filter=${filter}`
 		),
 };

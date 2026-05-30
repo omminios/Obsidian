@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildTransactions, fmt, RANGES, type AccountDisplay, type RangeKey, type Slice, type Transaction, type View, type ViewKey } from "./data";
+import { buildTransactions, fmt, groupAccountsByType, RANGES, type AccountDisplay, type AccountTypeGroup, type RangeKey, type Slice, type Transaction, type View, type ViewKey } from "./data";
 import { BarChart, DualLineChart, PieChart } from "./charts";
+import { ModalShell } from "./modals";
 import { api, ApiError, type TxPageFilter } from "../../lib/api";
 
 type ChartKind = "line" | "pie" | "bar";
@@ -451,16 +452,247 @@ function formatSyncTime(iso: string | null): string {
 	);
 }
 
+function Chevron() {
+	return (
+		<svg
+			className="acct-group-chevron"
+			width="16"
+			height="16"
+			viewBox="0 0 16 16"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.75"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M4 6l4 4 4-4" />
+		</svg>
+	);
+}
+
+function ChevronRight() {
+	return (
+		<svg
+			className="acct-li-chevron"
+			width="16"
+			height="16"
+			viewBox="0 0 16 16"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.75"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M6 4l4 4-4 4" />
+		</svg>
+	);
+}
+
+function AccountGroup({
+	group,
+	defaultOpen,
+	onSelect,
+}: {
+	group: AccountTypeGroup;
+	defaultOpen: boolean;
+	onSelect: (a: AccountDisplay) => void;
+}) {
+	const [open, setOpen] = useState(defaultOpen);
+	const panelId = `acct-group-${group.type}`;
+	const showSubLabels = group.subgroups.length > 1;
+
+	return (
+		<div className={`acct-group ${open ? "open" : ""}`}>
+			<button
+				type="button"
+				className="acct-group-head"
+				aria-expanded={open}
+				aria-controls={panelId}
+				onClick={() => setOpen((o) => !o)}
+			>
+				<span className="acct-group-mark" style={{ background: `var(--${group.tone})` }} />
+				<div className="acct-group-title">
+					<span className="acct-group-label">{group.label}</span>
+					<span className="acct-group-count">
+						{group.count} {group.count === 1 ? "account" : "accounts"}
+					</span>
+				</div>
+				<span className={`acct-group-total mono ${group.total < 0 ? "neg" : ""}`}>
+					{fmt(group.total, { cents: true })}
+				</span>
+				<Chevron />
+			</button>
+
+			<div className="acct-group-body" id={panelId} hidden={!open}>
+				{group.subgroups.map((sg) => (
+					<div key={sg.subtype} className="acct-subgroup">
+						{showSubLabels ? (
+							<div className="acct-subgroup-head">
+								<span className="acct-subgroup-label">{sg.subtype}</span>
+								<span className="acct-subgroup-total mono">
+									{fmt(sg.total, { cents: true })}
+								</span>
+							</div>
+						) : null}
+						<ul className="acct-list">
+							{sg.accounts.map((a) => (
+								<li key={a.id}>
+									<button
+										type="button"
+										className="acct-li acct-li-btn"
+										onClick={() => onSelect(a)}
+										aria-label={`View transactions for ${a.n}`}
+									>
+										<span className="acct-mark" style={{ background: `var(--${a.tone})` }}>
+											{a.n[0]}
+										</span>
+										<div className="acct-meta">
+											<div className="acct-name">{a.n}</div>
+											<div className="acct-sub">
+												{a.t} · {a.mask}
+											</div>
+										</div>
+										<div className={`acct-bal mono ${a.bal < 0 ? "neg" : ""}`}>
+											{fmt(a.bal, { cents: true })}
+										</div>
+										<ChevronRight />
+									</button>
+								</li>
+							))}
+						</ul>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function AccountTransactionsModal({
+	account,
+	onClose,
+}: {
+	account: AccountDisplay;
+	onClose: () => void;
+}) {
+	const [filter, setFilter] = useState<TxPageFilter>("all");
+	const [page, setPage] = useState(1);
+	const [txs, setTxs] = useState<Transaction[]>([]);
+	const [total, setTotal] = useState(0);
+	const [pages, setPages] = useState(1);
+	const [loading, setLoading] = useState(true);
+	const [fetchError, setFetchError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		setLoading(true);
+		setFetchError(null);
+		api
+			.getAccountTransactionPage(account.id, page, filter)
+			.then((data) => {
+				if (cancelled) return;
+				setTxs(buildTransactions(data.transactions, false));
+				setTotal(data.total);
+				setPages(data.pages);
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				console.error("[AccountTransactionsModal] fetch failed", err);
+				setFetchError(err instanceof Error ? err.message : String(err));
+			})
+			.finally(() => { if (!cancelled) setLoading(false); });
+
+		return () => { cancelled = true; };
+	}, [account.id, page, filter]);
+
+	const handleFilter = (f: TxPageFilter) => {
+		setFilter(f);
+		setPage(1);
+	};
+
+	return (
+		<ModalShell
+			title={account.n}
+			sub={`${account.t} · ${account.mask} · ${fmt(account.bal, { cents: true })} · ${total.toLocaleString()} transactions`}
+			onClose={onClose}
+			width={620}
+		>
+			<div className="acct-tx-modal">
+				<div className="seg acct-tx-filter">
+					<button
+						className={`seg-btn ${filter === "all" ? "active" : ""}`}
+						onClick={() => handleFilter("all")}
+					>
+						All
+					</button>
+					<button
+						className={`seg-btn ${filter === "income" ? "active" : ""}`}
+						onClick={() => handleFilter("income")}
+					>
+						Income
+					</button>
+					<button
+						className={`seg-btn ${filter === "spend" ? "active" : ""}`}
+						onClick={() => handleFilter("spend")}
+					>
+						Spending
+					</button>
+				</div>
+
+				{loading ? (
+					<div className="tx-loading">Loading…</div>
+				) : fetchError ? (
+					<div className="tx-loading" style={{ color: "oklch(0.55 0.18 25)" }}>
+						Failed to load: {fetchError}
+					</div>
+				) : txs.length === 0 ? (
+					<div className="tx-empty">No transactions for this account.</div>
+				) : (
+					<ul className="tx-list">
+						{txs.map((t, i) => (
+							<TxRow key={i} t={t} />
+						))}
+					</ul>
+				)}
+
+				{pages > 1 ? (
+					<div className="tx-pagination">
+						<button
+							className="btn btn-sm btn-ghost"
+							onClick={() => setPage((p) => p - 1)}
+							disabled={page <= 1 || loading}
+						>
+							← Prev
+						</button>
+						<span className="tx-page-label">
+							{page} / {pages}
+						</span>
+						<button
+							className="btn btn-sm btn-ghost"
+							onClick={() => setPage((p) => p + 1)}
+							disabled={page >= pages || loading}
+						>
+							Next →
+						</button>
+					</div>
+				) : null}
+			</div>
+		</ModalShell>
+	);
+}
+
 export function TabAccounts({ v, view, accounts }: { v: View; view: ViewKey; accounts: AccountDisplay[] }) {
 	const accts = accounts;
+	const groups = useMemo(() => groupAccountsByType(accts), [accts]);
+	const [selected, setSelected] = useState<AccountDisplay | null>(null);
+
 	const total = accts.reduce((a, b) => a + b.bal, 0);
-	const cash = accts
-		.filter((a) => a.t.startsWith("Checking") || a.t.startsWith("Savings"))
+	const cash = accts.filter((a) => a.type === "depository").reduce((s, a) => s + a.bal, 0);
+	const inv = accts.filter((a) => a.type === "investment").reduce((s, a) => s + a.bal, 0);
+	const debt = accts
+		.filter((a) => a.type === "credit" || a.type === "loan")
 		.reduce((s, a) => s + a.bal, 0);
-	const inv = accts
-		.filter((a) => a.t.startsWith("Invest") || a.t.startsWith("Retire"))
-		.reduce((s, a) => s + a.bal, 0);
-	const debt = accts.filter((a) => a.bal < 0).reduce((s, a) => s + a.bal, 0);
 
 	const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 	const [isSyncing, setIsSyncing] = useState(false);
@@ -500,7 +732,7 @@ export function TabAccounts({ v, view, accounts }: { v: View; view: ViewKey; acc
 				<KPI
 					label="Liabilities"
 					value={fmt(debt)}
-					sub="Credit cards"
+					sub="Credit cards + loans"
 					accent={debt < 0 ? "neg" : null}
 				/>
 			</div>
@@ -523,25 +755,28 @@ export function TabAccounts({ v, view, accounts }: { v: View; view: ViewKey; acc
 						<button className="btn btn-sm btn-brand">+ Add account</button>
 					</div>
 				</div>
-				<ul className="acct-list">
-					{accts.map((a, i) => (
-						<li key={i} className="acct-li">
-							<span className="acct-mark" style={{ background: `var(--${a.tone})` }}>
-								{a.n[0]}
-							</span>
-							<div className="acct-meta">
-								<div className="acct-name">{a.n}</div>
-								<div className="acct-sub">
-									{a.t} · {a.mask}
-								</div>
-							</div>
-							<div className={`acct-bal mono ${a.bal < 0 ? "neg" : ""}`}>
-								{fmt(a.bal, { cents: true })}
-							</div>
-						</li>
-					))}
-				</ul>
+				{groups.length === 0 ? (
+					<div className="tx-empty">No accounts connected yet.</div>
+				) : (
+					<div className="acct-groups">
+						{groups.map((g, i) => (
+							<AccountGroup
+								key={g.type}
+								group={g}
+								defaultOpen={i === 0}
+								onSelect={setSelected}
+							/>
+						))}
+					</div>
+				)}
 			</section>
+
+			{selected ? (
+				<AccountTransactionsModal
+					account={selected}
+					onClose={() => setSelected(null)}
+				/>
+			) : null}
 		</div>
 	);
 }

@@ -228,6 +228,53 @@ export const getMemberTransactionsPaged = async (
 	}
 };
 
+// Returns a paginated page of transactions for a single account, newest-first.
+// Scoped purely by account_id (via account_transactions); the caller is
+// responsible for verifying the requesting user is allowed to see this account.
+// Returns the plain DashboardTransaction shape (no owner fields) since every
+// row trivially belongs to the one account being viewed.
+export const getAccountTransactionsPaged = async (
+	accountId: number,
+	page: number,
+	limit: number,
+	filter: TxFilter
+): Promise<{ transactions: DashboardTransaction[]; total: number }> => {
+	const offset = (page - 1) * limit;
+	const cond = amountClause(filter);
+	try {
+		const [dataRes, countRes] = await Promise.all([
+			pool.query(
+				`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
+				        t.merchant_name, a.account_name, a.institution_name, a.last_four
+				 FROM transactions t
+				 JOIN account_transactions akt ON t.id = akt.transaction_id
+				 JOIN accounts a ON akt.account_id = a.id
+				 WHERE akt.account_id = $1${cond}
+				 ORDER BY t.transaction_date DESC, t.id DESC
+				 LIMIT $2 OFFSET $3`,
+				[accountId, limit, offset]
+			),
+			pool.query(
+				`SELECT COUNT(*) AS total
+				 FROM account_transactions akt
+				 JOIN transactions t ON t.id = akt.transaction_id
+				 WHERE akt.account_id = $1${cond}`,
+				[accountId]
+			),
+		]);
+		return {
+			transactions: dataRes.rows as DashboardTransaction[],
+			total: Number(countRes.rows[0]?.total ?? 0),
+		};
+	} catch (e) {
+		console.error("[getAccountTransactionsPaged]", e);
+		throw new DatabaseError("Failed to fetch account transactions (paged)", {
+			accountId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
 // Returns basic profile info for the requesting user (id, name, username, email).
 // Used to populate the user section of the dashboard summary response.
 export const getUserDashboardInfo = async (userId: number): Promise<DashboardUser | null> => {

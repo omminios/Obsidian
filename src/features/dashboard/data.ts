@@ -25,11 +25,14 @@ export type View = {
 export type ViewKey = string;
 
 export type AccountDisplay = {
+	id: number;
 	n: string;
 	t: string;
 	bal: number;
 	mask: string;
 	tone: string;
+	type: string;
+	subtype: string | null;
 };
 
 export type GroupView = {
@@ -98,7 +101,9 @@ function accountTone(type: string, subtype: string | null): string {
 }
 
 function effectiveBal(bal: number | null, type: string): number {
-	const raw = bal ?? 0;
+	// pg returns NUMERIC columns as strings, so coerce before any arithmetic —
+	// otherwise summing depository/investment balances concatenates into NaN.
+	const raw = Number(bal ?? 0);
 	return type === "credit" || type === "loan" ? -raw : raw;
 }
 
@@ -187,21 +192,27 @@ export function buildDashboardView(summary: DashboardSummary, viewKey: string): 
 export function buildAccountsForView(summary: DashboardSummary, viewKey: string): AccountDisplay[] {
 	if (viewKey === "group") {
 		return summary.group_accounts.map((a) => ({
+			id: a.id,
 			n: a.account_name,
 			t: `${cap(a.subtype ?? a.type)} · ${a.owner_first_name}`,
 			bal: effectiveBal(a.balance_current, a.type),
 			mask: a.last_four ? `••${a.last_four}` : "—",
 			tone: accountTone(a.type, a.subtype),
+			type: a.type,
+			subtype: a.subtype,
 		}));
 	}
 
 	if (viewKey === "me") {
 		return summary.my_accounts.map((a) => ({
+			id: a.id,
 			n: a.account_name,
 			t: cap(a.subtype ?? a.type),
 			bal: effectiveBal(a.balance_current, a.type),
 			mask: a.last_four ? `••${a.last_four}` : "—",
 			tone: accountTone(a.type, a.subtype),
+			type: a.type,
+			subtype: a.subtype,
 		}));
 	}
 
@@ -209,12 +220,86 @@ export function buildAccountsForView(summary: DashboardSummary, viewKey: string)
 	return summary.group_accounts
 		.filter((a) => a.owner_id === memberId)
 		.map((a) => ({
+			id: a.id,
 			n: a.account_name,
 			t: cap(a.subtype ?? a.type),
 			bal: effectiveBal(a.balance_current, a.type),
 			mask: a.last_four ? `••${a.last_four}` : "—",
 			tone: accountTone(a.type, a.subtype),
+			type: a.type,
+			subtype: a.subtype,
 		}));
+}
+
+// ============================================================
+// Account grouping — type → subtype, for the dropdown view
+// ============================================================
+
+export type AccountSubGroup = {
+	subtype: string;
+	accounts: AccountDisplay[];
+	total: number;
+};
+
+export type AccountTypeGroup = {
+	type: string;
+	label: string;
+	tone: string;
+	count: number;
+	total: number;
+	subgroups: AccountSubGroup[];
+};
+
+// Display order + friendly labels for Plaid's four top-level types.
+const TYPE_META: Record<string, { label: string; tone: string; order: number }> = {
+	depository: { label: "Cash & banking", tone: "cat-1", order: 0 },
+	credit: { label: "Credit cards", tone: "cat-5", order: 1 },
+	loan: { label: "Loans", tone: "cat-6", order: 2 },
+	investment: { label: "Investments", tone: "cat-3", order: 3 },
+};
+
+function typeMeta(type: string) {
+	return TYPE_META[type] ?? { label: cap(type), tone: "cat-4", order: 99 };
+}
+
+/**
+ * Organize a flat account list into collapsible groups: one per Plaid
+ * top-level type, each holding subgroups keyed by subtype. Groups and
+ * subgroups preserve a stable display order; subtypes are sorted A–Z.
+ */
+export function groupAccountsByType(accounts: AccountDisplay[]): AccountTypeGroup[] {
+	const byType = new Map<string, Map<string, AccountDisplay[]>>();
+
+	for (const a of accounts) {
+		const subtypeKey = cap(a.subtype ?? a.type);
+		if (!byType.has(a.type)) byType.set(a.type, new Map());
+		const subs = byType.get(a.type)!;
+		if (!subs.has(subtypeKey)) subs.set(subtypeKey, []);
+		subs.get(subtypeKey)!.push(a);
+	}
+
+	const groups: AccountTypeGroup[] = [];
+	for (const [type, subs] of byType) {
+		const meta = typeMeta(type);
+		const subgroups: AccountSubGroup[] = [...subs.entries()]
+			.map(([subtype, accts]) => ({
+				subtype,
+				accounts: accts,
+				total: accts.reduce((s, a) => s + a.bal, 0),
+			}))
+			.sort((a, b) => a.subtype.localeCompare(b.subtype));
+
+		groups.push({
+			type,
+			label: meta.label,
+			tone: meta.tone,
+			count: subgroups.reduce((s, g) => s + g.accounts.length, 0),
+			total: subgroups.reduce((s, g) => s + g.total, 0),
+			subgroups,
+		});
+	}
+
+	return groups.sort((a, b) => typeMeta(a.type).order - typeMeta(b.type).order);
 }
 
 export function buildGroupViews(summary: DashboardSummary): GroupView[] {

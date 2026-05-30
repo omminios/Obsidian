@@ -142,6 +142,30 @@ export const getAccountMembership = async (
 	}
 };
 
+// Whether an account has been shared into a given group's visibility. Used to
+// authorize read access to an account the user doesn't personally hold but can
+// see through their household.
+export const isAccountVisibleToGroup = async (
+	accountId: number,
+	groupId: number
+): Promise<boolean> => {
+	try {
+		const res = await pool.query(
+			`SELECT 1 FROM account_group_visibility
+			WHERE account_id = $1 AND group_id = $2
+			LIMIT 1`,
+			[accountId, groupId]
+		);
+		return (res.rowCount ?? 0) > 0;
+	} catch (e) {
+		throw new DatabaseError("Failed to check account visibility", {
+			accountId,
+			groupId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
 // Make an account visible to a group. Idempotent via the unique constraint.
 export const shareAccountWithGroup = async (
 	accountId: number,

@@ -6,6 +6,17 @@ import { TRANSACTION_CATEGORIES } from "./transactionTaxonomy";
 type ManualAccount = DashboardSummary["my_accounts"][number];
 type Direction = "expense" | "income";
 
+// An existing manual transaction being edited. amount is signed (positive =
+// income, negative = expense), matching the stored convention.
+export type EditingTransaction = {
+	id: number;
+	vendor: string;
+	amount: number;
+	category: string | null;
+	accountId: number;
+	dateISO: string;
+};
+
 // Returns today's date as YYYY-MM-DD in local time — the default for a new
 // transaction and the max selectable date (no future-dating).
 function todayISO(): string {
@@ -14,31 +25,44 @@ function todayISO(): string {
 	return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
 }
 
-// Lets the user record a transaction by hand — for cash spending or anything
-// Plaid can't see. Collects vendor, category, account, date, and amount, then
-// posts to the transactions endpoint (which links it to the account so it shows
-// up on the dashboard). On success it calls onAdded so the page can refetch.
+// Add or edit a manual transaction — for cash spending or anything Plaid can't
+// see. Collects vendor, category, account, date, and amount. When `editing` is
+// passed the form is pre-filled and saves via PATCH (and offers delete);
+// otherwise it creates a new transaction. On success it calls onSaved so the
+// page can refetch.
 export function AddTransactionModal({
 	accounts,
+	editing,
 	onClose,
-	onAdded,
+	onSaved,
 }: {
 	accounts: ManualAccount[];
+	editing?: EditingTransaction;
 	onClose: () => void;
-	onAdded: () => void;
+	onSaved: () => void;
 }) {
-	const [vendor, setVendor] = useState("");
-	const [category, setCategory] = useState(TRANSACTION_CATEGORIES[0].value);
-	const [accountId, setAccountId] = useState<number | "">(
-		accounts[0]?.id ?? ""
+	const isEdit = editing != null;
+
+	const [vendor, setVendor] = useState(editing?.vendor ?? "");
+	const [category, setCategory] = useState(
+		editing?.category ?? TRANSACTION_CATEGORIES[0].value
 	);
-	const [date, setDate] = useState(todayISO());
-	const [direction, setDirection] = useState<Direction>("expense");
-	const [amount, setAmount] = useState("");
+	const [accountId, setAccountId] = useState<number | "">(
+		editing?.accountId ?? accounts[0]?.id ?? ""
+	);
+	const [date, setDate] = useState(editing?.dateISO ?? todayISO());
+	const [direction, setDirection] = useState<Direction>(
+		editing && editing.amount > 0 ? "income" : "expense"
+	);
+	const [amount, setAmount] = useState(
+		editing ? String(Math.abs(editing.amount)) : ""
+	);
 	const [error, setError] = useState("");
 	const [saving, setSaving] = useState(false);
+	const [deleting, setDeleting] = useState(false);
 
 	const noAccounts = accounts.length === 0;
+	const busy = saving || deleting;
 
 	const submit = async (e?: FormEvent) => {
 		e?.preventDefault();
@@ -65,42 +89,88 @@ export function AddTransactionModal({
 
 		setSaving(true);
 		try {
-			await api.createManualTransaction({
-				account_id: accountId,
-				transaction_date: date,
-				amount: signed,
-				merchant_name: vendor.trim(),
-				category,
-			});
-			onAdded();
+			if (isEdit) {
+				await api.updateTransaction(editing.id, {
+					account_id: accountId,
+					transaction_date: date,
+					amount: signed,
+					merchant_name: vendor.trim(),
+					category,
+				});
+			} else {
+				await api.createManualTransaction({
+					account_id: accountId,
+					transaction_date: date,
+					amount: signed,
+					merchant_name: vendor.trim(),
+					category,
+				});
+			}
+			onSaved();
 			onClose();
 		} catch (err) {
 			setError(
 				err instanceof ApiError
 					? err.message
-					: "Couldn't add the transaction. Please try again."
+					: "Couldn't save the transaction. Please try again."
 			);
 			setSaving(false);
 		}
 	};
 
+	const remove = async () => {
+		if (!editing) return;
+		setError("");
+		setDeleting(true);
+		try {
+			await api.deleteTransaction(editing.id);
+			onSaved();
+			onClose();
+		} catch (err) {
+			setError(
+				err instanceof ApiError
+					? err.message
+					: "Couldn't delete the transaction. Please try again."
+			);
+			setDeleting(false);
+		}
+	};
+
 	return (
 		<ModalShell
-			title="Add a transaction"
-			sub="Record a transaction by hand — for cash spending or anything Plaid can't import."
+			title={isEdit ? "Edit transaction" : "Add a transaction"}
+			sub={
+				isEdit
+					? "Update this manually-entered transaction."
+					: "Record a transaction by hand — for cash spending or anything Plaid can't import."
+			}
 			onClose={onClose}
 			footer={
 				<>
-					<button className="btn btn-ghost" onClick={onClose} disabled={saving}>
-						Cancel
-					</button>
+					{isEdit ? (
+						<button
+							className="btn btn-ghost btn-danger"
+							onClick={() => void remove()}
+							disabled={busy}
+						>
+							{deleting ? "Deleting…" : "Delete"}
+						</button>
+					) : (
+						<button className="btn btn-ghost" onClick={onClose} disabled={busy}>
+							Cancel
+						</button>
+					)}
 					<div style={{ flex: 1 }} />
 					<button
 						className="btn btn-brand"
 						onClick={() => void submit()}
-						disabled={saving || noAccounts}
+						disabled={busy || noAccounts}
 					>
-						{saving ? "Saving…" : "Add transaction"}
+						{saving
+							? "Saving…"
+							: isEdit
+							? "Save changes"
+							: "Add transaction"}
 					</button>
 				</>
 			}

@@ -74,7 +74,7 @@ export function AddAccountModal({
 			<ManualAccountForm
 				onBack={() => setMode("choose")}
 				onClose={onClose}
-				onAdded={onAdded}
+				onSaved={onAdded}
 			/>
 		);
 	}
@@ -121,25 +121,77 @@ export function AddAccountModal({
 	);
 }
 
-function ManualAccountForm({
+// An existing manual account being edited. type is one of Plaid's top-level
+// types (which double as ManualAccountType); balance_current is the raw stored
+// value (no debt-sign flip — the dashboard negates credit/loan for display only).
+export type EditingAccount = {
+	id: number;
+	account_name: string;
+	type: ManualAccountType;
+	subtype: string | null;
+	institution_name: string | null;
+	last_four: string | null;
+	balance_current: number | null;
+};
+
+// Add or edit a manual account. When `editing` is passed the form is pre-filled
+// and saves via PATCH; otherwise it creates. `onBack` is only shown in the create
+// flow (to return to the Plaid/manual chooser); edit mode shows Cancel instead.
+export function ManualAccountForm({
+	editing,
 	onBack,
 	onClose,
-	onAdded,
+	onSaved,
+	onDeleted,
+	readOnly = false,
 }: {
-	onBack: () => void;
+	editing?: EditingAccount;
+	onBack?: () => void;
 	onClose: () => void;
-	onAdded: () => void;
+	onSaved: () => void;
+	// Only meaningful in edit mode — when provided, a Delete (remove) button is
+	// shown. Called after the account is removed (soft delete; history is kept).
+	onDeleted?: () => void;
+	// Plaid accounts are read-only: their details are managed by Plaid and can't
+	// be edited here. The only available action is removing the account, which
+	// also stops it from syncing going forward.
+	readOnly?: boolean;
 }) {
-	const [name, setName] = useState("");
-	const [type, setType] = useState<ManualAccountType>("depository");
-	const [subtype, setSubtype] = useState<string>(SUBTYPE_OPTIONS.depository[0].value);
-	const [institution, setInstitution] = useState("");
-	const [lastFour, setLastFour] = useState("");
-	const [balance, setBalance] = useState("");
+	const isEdit = editing != null;
+	const [name, setName] = useState(editing?.account_name ?? "");
+	const [type, setType] = useState<ManualAccountType>(editing?.type ?? "depository");
+	const [subtype, setSubtype] = useState<string>(
+		editing?.subtype ?? SUBTYPE_OPTIONS[editing?.type ?? "depository"][0].value
+	);
+	const [institution, setInstitution] = useState(editing?.institution_name ?? "");
+	const [lastFour, setLastFour] = useState(editing?.last_four ?? "");
+	const [balance, setBalance] = useState(
+		editing?.balance_current != null ? String(editing.balance_current) : ""
+	);
 	const [error, setError] = useState("");
 	const [saving, setSaving] = useState(false);
+	// When true, the form body is replaced by a delete-confirmation warning.
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const [deleting, setDeleting] = useState(false);
 
 	const isDebt = type === "credit" || type === "loan";
+
+	const handleDelete = async () => {
+		if (!editing) return;
+		setError("");
+		setDeleting(true);
+		try {
+			await api.deleteAccount(editing.id);
+			onDeleted?.();
+		} catch (err) {
+			setError(
+				err instanceof ApiError
+					? err.message
+					: "Couldn't remove the account. Please try again."
+			);
+			setDeleting(false);
+		}
+	};
 
 	const handleType = (next: ManualAccountType) => {
 		setType(next);
@@ -167,43 +219,156 @@ function ManualAccountForm({
 
 		setSaving(true);
 		try {
-			await api.createManualAccount({
+			const payload = {
 				account_name: name.trim(),
 				type,
 				subtype,
 				institution_name: institution.trim() || null,
 				last_four: lastFour || null,
 				balance_current: parsedBalance,
-			});
-			onAdded();
+			};
+			if (isEdit) {
+				await api.updateManualAccount(editing.id, payload);
+			} else {
+				await api.createManualAccount(payload);
+			}
+			onSaved();
 			onClose();
 		} catch (err) {
 			setError(
 				err instanceof ApiError
 					? err.message
-					: "Couldn't create the account. Please try again."
+					: "Couldn't save the account. Please try again."
 			);
 			setSaving(false);
 		}
 	};
 
+	// Delete confirmation — replaces the form body with a warning. The X in the
+	// corner still closes the whole modal (ModalShell's onClose).
+	if (confirmingDelete && editing) {
+		return (
+			<ModalShell
+				title="Remove account?"
+				onClose={onClose}
+				footer={
+					<>
+						<button
+							className="btn btn-ghost"
+							onClick={() => setConfirmingDelete(false)}
+							disabled={deleting}
+						>
+							Cancel
+						</button>
+						<div style={{ flex: 1 }} />
+						<button
+							className="btn btn-danger-solid"
+							onClick={() => void handleDelete()}
+							disabled={deleting}
+						>
+							{deleting ? "Removing…" : "Remove account"}
+						</button>
+					</>
+				}
+			>
+				<div className="db-form">
+					<div className="db-warn">
+						Removing <strong>{editing.account_name}</strong> takes it off your
+						dashboard{readOnly ? " and stops syncing it from your bank going forward" : ""}.
+						Your existing <strong>transaction history is kept</strong> — past
+						activity still appears in your feed and totals.
+					</div>
+					{error ? <div className="field-error">{error}</div> : null}
+				</div>
+			</ModalShell>
+		);
+	}
+
+	// Read-only view for Plaid accounts. Details are managed by Plaid and can't
+	// be edited — the only action is removing the account (which also stops it
+	// from syncing). The X in the corner still closes the modal.
+	if (readOnly && editing) {
+		const detail = (label: string, value: string | null) => (
+			<label className="db-field">
+				<span className="db-field-l">{label}</span>
+				<input className="input" value={value ?? "—"} disabled readOnly />
+			</label>
+		);
+		return (
+			<ModalShell
+				title="Account details"
+				sub="Synced from your bank through Plaid. These details are managed by Plaid and can't be edited here."
+				onClose={onClose}
+				footer={
+					<>
+						<button
+							className="btn btn-ghost btn-danger"
+							onClick={() => setConfirmingDelete(true)}
+						>
+							Delete
+						</button>
+						<div style={{ flex: 1 }} />
+						<button className="btn btn-brand" onClick={onClose}>
+							Close
+						</button>
+					</>
+				}
+			>
+				<div className="db-form">
+					{detail("Account name", editing.account_name)}
+					{detail("Type", editing.type)}
+					{detail("Subtype", editing.subtype)}
+					{detail("Institution", editing.institution_name)}
+					{detail(
+						"Last 4 digits",
+						editing.last_four ? `•••• ${editing.last_four}` : null
+					)}
+					{detail(
+						"Balance",
+						editing.balance_current != null
+							? String(editing.balance_current)
+							: null
+					)}
+				</div>
+			</ModalShell>
+		);
+	}
+
 	return (
 		<ModalShell
-			title="Add account manually"
-			sub="Enter the account details. Balances won't update automatically."
+			title={isEdit ? "Edit account" : "Add account manually"}
+			sub={
+				isEdit
+					? "Update the account details."
+					: "Enter the account details. Balances won't update automatically."
+			}
 			onClose={onClose}
 			footer={
 				<>
-					<button className="btn btn-ghost" onClick={onBack} disabled={saving}>
-						← Back
-					</button>
+					{onBack ? (
+						<button className="btn btn-ghost" onClick={onBack} disabled={saving}>
+							← Back
+						</button>
+					) : isEdit && onDeleted ? (
+						<button
+							className="btn btn-ghost btn-danger"
+							onClick={() => setConfirmingDelete(true)}
+							disabled={saving}
+						>
+							Delete
+						</button>
+					) : (
+						<button className="btn btn-ghost" onClick={onClose} disabled={saving}>
+							Cancel
+						</button>
+					)}
 					<div style={{ flex: 1 }} />
 					<button
 						className="btn btn-brand"
 						onClick={() => void submit()}
 						disabled={saving}
 					>
-						{saving ? "Saving…" : "Add account"}
+						{saving ? "Saving…" : isEdit ? "Save changes" : "Add account"}
 					</button>
 				</>
 			}

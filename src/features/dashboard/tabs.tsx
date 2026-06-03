@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { buildTransactions, fmt, groupAccountsByType, RANGES, type AccountDisplay, type AccountTypeGroup, type RangeKey, type Slice, type Transaction, type View, type ViewKey } from "./data";
 import { BarChart, DualLineChart, PieChart } from "./charts";
 import { ModalShell } from "./modals";
-import { AddAccountModal } from "./AddAccountModal";
-import { AddTransactionModal } from "./AddTransactionModal";
+import { AddAccountModal, ManualAccountForm, type EditingAccount } from "./AddAccountModal";
+import { AddTransactionModal, type EditingTransaction } from "./AddTransactionModal";
+import type { ManualAccountType } from "./accountTaxonomy";
 import { IconBank, IconCard, IconLoan, IconInvest } from "../../components/icons";
 import { api, ApiError, type DashboardSummary, type TxPageFilter } from "../../lib/api";
 
@@ -283,9 +284,15 @@ export function DashboardTab({
 	);
 }
 
-function TxRow({ t }: { t: Transaction }) {
-	return (
-		<li className="tx-li">
+function TxRow({
+	t,
+	onEdit,
+}: {
+	t: Transaction;
+	onEdit?: (t: Transaction) => void;
+}) {
+	const content = (
+		<>
 			<span className={`tx-tag ${txTagClass(t.cat)}`}>{t.cat[0]}</span>
 			<div className="tx-li-meta">
 				<div className="tx-li-name">{t.name}</div>
@@ -300,8 +307,26 @@ function TxRow({ t }: { t: Transaction }) {
 			<div className={`tx-li-amt mono ${t.positive ? "pos" : ""}`}>
 				{fmt(t.amt, { signed: true, cents: true })}
 			</div>
-		</li>
+		</>
 	);
+
+	// Only manual transactions are editable — clicking opens the editor.
+	if (onEdit && t.editable) {
+		return (
+			<li>
+				<button
+					type="button"
+					className="tx-li tx-li-btn"
+					onClick={() => onEdit(t)}
+					aria-label={`Edit ${t.name}`}
+				>
+					{content}
+				</button>
+			</li>
+		);
+	}
+
+	return <li className="tx-li">{content}</li>;
 }
 
 export function TabTransactions({
@@ -322,8 +347,25 @@ export function TabTransactions({
 	const [loading, setLoading] = useState(true);
 	const [fetchError, setFetchError] = useState<string | null>(null);
 	const [addingTx, setAddingTx] = useState(false);
-	// Bumped after a manual add to re-run the fetch effect for the current page.
+	const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+	// Bumped after a manual add/edit/delete to re-run the fetch for the current page.
 	const [reloadKey, setReloadKey] = useState(0);
+
+	const handleSaved = () => {
+		setReloadKey((k) => k + 1);
+		onTransactionAdded();
+	};
+
+	const editingPayload: EditingTransaction | undefined = editingTx
+		? {
+				id: editingTx.id,
+				vendor: editingTx.name,
+				amount: editingTx.amt,
+				category: editingTx.categoryRaw,
+				accountId: editingTx.accountId,
+				dateISO: editingTx.dateISO,
+		  }
+		: undefined;
 	const prevViewRef = useRef(view);
 
 	useEffect(() => {
@@ -435,7 +477,7 @@ export function TabTransactions({
 				) : (
 					<ul className="tx-list">
 						{txs.map((t, i) => (
-							<TxRow key={i} t={t} />
+							<TxRow key={i} t={t} onEdit={setEditingTx} />
 						))}
 						{txs.length === 0 ? (
 							<li className="tx-empty">No transactions found.</li>
@@ -470,10 +512,16 @@ export function TabTransactions({
 				<AddTransactionModal
 					accounts={accounts}
 					onClose={() => setAddingTx(false)}
-					onAdded={() => {
-						setReloadKey((k) => k + 1);
-						onTransactionAdded();
-					}}
+					onSaved={handleSaved}
+				/>
+			) : null}
+
+			{editingTx ? (
+				<AddTransactionModal
+					accounts={accounts}
+					editing={editingPayload}
+					onClose={() => setEditingTx(null)}
+					onSaved={handleSaved}
 				/>
 			) : null}
 		</div>
@@ -615,10 +663,14 @@ function AccountGroup({
 
 function AccountTransactionsModal({
 	account,
+	accounts,
 	onClose,
+	onChanged,
 }: {
 	account: AccountDisplay;
+	accounts: DashboardSummary["my_accounts"];
 	onClose: () => void;
+	onChanged: () => void;
 }) {
 	const [filter, setFilter] = useState<TxPageFilter>("all");
 	const [page, setPage] = useState(1);
@@ -627,6 +679,28 @@ function AccountTransactionsModal({
 	const [pages, setPages] = useState(1);
 	const [loading, setLoading] = useState(true);
 	const [fetchError, setFetchError] = useState<string | null>(null);
+	const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+	const [editingAccount, setEditingAccount] = useState(false);
+	// Bumped after an edit/delete to re-run the fetch for the current page.
+	const [reloadKey, setReloadKey] = useState(0);
+
+	// The user can manage any account they personally own — look up the raw record
+	// from their own accounts. Manual accounts are fully editable; Plaid accounts
+	// open read-only (details are managed by Plaid) with removal as the only action.
+	const ownRaw = accounts.find((a) => a.id === account.id);
+	const accountEditable = ownRaw != null;
+	const accountReadOnly = ownRaw != null && !ownRaw.is_manual;
+	const editingAccountPayload: EditingAccount | undefined = ownRaw
+		? {
+				id: ownRaw.id,
+				account_name: ownRaw.account_name,
+				type: ownRaw.type as ManualAccountType,
+				subtype: ownRaw.subtype,
+				institution_name: ownRaw.institution_name,
+				last_four: ownRaw.last_four,
+				balance_current: ownRaw.balance_current,
+		  }
+		: undefined;
 
 	useEffect(() => {
 		let cancelled = false;
@@ -648,12 +722,30 @@ function AccountTransactionsModal({
 			.finally(() => { if (!cancelled) setLoading(false); });
 
 		return () => { cancelled = true; };
-	}, [account.id, page, filter]);
+	}, [account.id, page, filter, reloadKey]);
 
 	const handleFilter = (f: TxPageFilter) => {
 		setFilter(f);
 		setPage(1);
 	};
+
+	// Refresh both this account's transaction list and the parent dashboard
+	// (its totals/categories) after a manual transaction changes.
+	const handleSaved = () => {
+		setReloadKey((k) => k + 1);
+		onChanged();
+	};
+
+	const editingPayload: EditingTransaction | undefined = editingTx
+		? {
+				id: editingTx.id,
+				vendor: editingTx.name,
+				amount: editingTx.amt,
+				category: editingTx.categoryRaw,
+				accountId: editingTx.accountId,
+				dateISO: editingTx.dateISO,
+		  }
+		: undefined;
 
 	return (
 		<ModalShell
@@ -661,6 +753,16 @@ function AccountTransactionsModal({
 			sub={`${account.t} · ${account.mask} · ${fmt(account.bal, { cents: true })} · ${total.toLocaleString()} transactions`}
 			onClose={onClose}
 			width={620}
+			headerAction={
+				accountEditable ? (
+					<button
+						className="btn btn-sm"
+						onClick={() => setEditingAccount(true)}
+					>
+						Edit
+					</button>
+				) : undefined
+			}
 		>
 			<div className="acct-tx-modal">
 				<div className="seg acct-tx-filter">
@@ -695,7 +797,7 @@ function AccountTransactionsModal({
 				) : (
 					<ul className="tx-list">
 						{txs.map((t, i) => (
-							<TxRow key={i} t={t} />
+							<TxRow key={i} t={t} onEdit={setEditingTx} />
 						))}
 					</ul>
 				)}
@@ -722,6 +824,35 @@ function AccountTransactionsModal({
 					</div>
 				) : null}
 			</div>
+
+			{editingTx ? (
+				<AddTransactionModal
+					accounts={accounts}
+					editing={editingPayload}
+					onClose={() => setEditingTx(null)}
+					onSaved={handleSaved}
+				/>
+			) : null}
+
+			{editingAccount && editingAccountPayload ? (
+				<ManualAccountForm
+					editing={editingAccountPayload}
+					readOnly={accountReadOnly}
+					onClose={() => setEditingAccount(false)}
+					onSaved={() => {
+						// Refresh the dashboard, then close the account modal so the
+						// (now stale) header is replaced by the refreshed accounts list.
+						onChanged();
+						onClose();
+					}}
+					onDeleted={() => {
+						// The account no longer exists — refresh the dashboard and close
+						// the account modal entirely.
+						onChanged();
+						onClose();
+					}}
+				/>
+			) : null}
 		</ModalShell>
 	);
 }
@@ -730,11 +861,13 @@ export function TabAccounts({
 	v,
 	view,
 	accounts,
+	myAccounts,
 	onAccountAdded,
 }: {
 	v: View;
 	view: ViewKey;
 	accounts: AccountDisplay[];
+	myAccounts: DashboardSummary["my_accounts"];
 	onAccountAdded: () => void;
 }) {
 	const accts = accounts;
@@ -834,7 +967,9 @@ export function TabAccounts({
 			{selected ? (
 				<AccountTransactionsModal
 					account={selected}
+					accounts={myAccounts}
 					onClose={() => setSelected(null)}
+					onChanged={onAccountAdded}
 				/>
 			) : null}
 

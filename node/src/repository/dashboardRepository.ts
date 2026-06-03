@@ -45,6 +45,7 @@ export interface DashboardAccount {
 	last_four: string | null;
 	balance_current: number | null;
 	balance_available: number | null;
+	is_manual: boolean;
 }
 
 export interface DashboardGroupAccount extends DashboardAccount {
@@ -60,6 +61,8 @@ export interface DashboardTransaction {
 	description: string | null;
 	category: string | null;
 	merchant_name: string | null;
+	entry_method: string;
+	account_id: number;
 	account_name: string;
 	institution_name: string | null;
 	last_four: string | null;
@@ -96,7 +99,7 @@ export const getMyTransactionsPaged = async (
 		const [dataRes, countRes] = await Promise.all([
 			pool.query(
 				`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
-				        t.merchant_name, a.account_name, a.institution_name, a.last_four,
+				        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four,
 				        t.user_id AS owner_id, u.first_name AS owner_first_name, u.last_name AS owner_last_name
 				 FROM transactions t
 				 JOIN account_transactions akt ON t.id = akt.transaction_id
@@ -142,7 +145,7 @@ export const getGroupTransactionsPaged = async (
 		const [dataRes, countRes] = await Promise.all([
 			pool.query(
 				`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
-				        t.merchant_name, a.account_name, a.institution_name, a.last_four,
+				        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four,
 				        t.user_id AS owner_id, u.first_name AS owner_first_name, u.last_name AS owner_last_name
 				 FROM transactions t
 				 JOIN account_transactions akt ON t.id = akt.transaction_id
@@ -193,7 +196,7 @@ export const getMemberTransactionsPaged = async (
 		const [dataRes, countRes] = await Promise.all([
 			pool.query(
 				`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
-				        t.merchant_name, a.account_name, a.institution_name, a.last_four,
+				        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four,
 				        t.user_id AS owner_id, u.first_name AS owner_first_name, u.last_name AS owner_last_name
 				 FROM transactions t
 				 JOIN account_transactions akt ON t.id = akt.transaction_id
@@ -245,7 +248,7 @@ export const getAccountTransactionsPaged = async (
 		const [dataRes, countRes] = await Promise.all([
 			pool.query(
 				`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
-				        t.merchant_name, a.account_name, a.institution_name, a.last_four
+				        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four
 				 FROM transactions t
 				 JOIN account_transactions akt ON t.id = akt.transaction_id
 				 JOIN accounts a ON akt.account_id = a.id
@@ -348,7 +351,7 @@ export const getMyDashboardAccounts = async (userId: number): Promise<DashboardA
 	try {
 		const res = await pool.query(
 			`SELECT a.id, a.account_name, a.type, a.subtype, a.institution_name,
-			        a.last_four, a.balance_current, a.balance_available
+			        a.last_four, a.balance_current, a.balance_available, (a.plaid_account_id IS NULL) AS is_manual
 			 FROM accounts a
 			 JOIN account_members am ON a.id = am.account_id
 			 WHERE am.user_id = $1
@@ -375,7 +378,7 @@ export const getGroupDashboardAccounts = async (groupId: number): Promise<Dashbo
 	try {
 		const res = await pool.query(
 			`SELECT a.id, a.account_name, a.type, a.subtype, a.institution_name,
-			        a.last_four, a.balance_current, a.balance_available,
+			        a.last_four, a.balance_current, a.balance_available, (a.plaid_account_id IS NULL) AS is_manual,
 			        am.user_id AS owner_id,
 			        u.first_name AS owner_first_name,
 			        u.last_name AS owner_last_name
@@ -408,7 +411,7 @@ export const getMyDashboardTransactions = async (
 	try {
 		const res = await pool.query(
 			`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
-			        t.merchant_name, a.account_name, a.institution_name, a.last_four
+			        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four
 			 FROM transactions t
 			 JOIN account_transactions akt ON t.id = akt.transaction_id
 			 JOIN accounts a ON akt.account_id = a.id
@@ -437,7 +440,7 @@ export const getGroupDashboardTransactions = async (
 	try {
 		const res = await pool.query(
 			`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
-			        t.merchant_name, a.account_name, a.institution_name, a.last_four,
+			        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four,
 			        t.user_id AS owner_id,
 			        u.first_name AS owner_first_name,
 			        u.last_name AS owner_last_name

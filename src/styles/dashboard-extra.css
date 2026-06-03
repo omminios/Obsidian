@@ -366,6 +366,27 @@
 /* Danger button */
 .btn-danger { color: oklch(0.55 0.18 25) !important; }
 
+/* Solid danger button — destructive confirmation actions */
+.btn-danger-solid {
+  color: #fff !important;
+  background: oklch(0.55 0.18 25) !important;
+  border-color: oklch(0.55 0.18 25) !important;
+}
+.btn-danger-solid:hover { background: oklch(0.48 0.19 25) !important; }
+.btn-danger-solid:disabled { opacity: 0.6; }
+
+/* Destructive-action warning callout */
+.db-warn {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: oklch(0.97 0.03 25);
+  border: 1px solid oklch(0.85 0.08 25);
+  color: oklch(0.42 0.12 25);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.db-warn strong { color: oklch(0.4 0.16 25); }
+
 /* Transaction pagination */
 .tx-pagination {
   display: flex;
@@ -522,6 +543,27 @@
 .acct-li-btn:hover .acct-li-chevron {
   color: var(--ink-3);
   transform: translateX(2px);
+}
+
+/* Clickable transaction row — opens the editor for a manual transaction.
+   Reuses the .tx-li grid; the compound .tx-li.tx-li-btn wins over .tx-li. */
+.tx-li.tx-li-btn {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  border-radius: 8px;
+  transition: background 120ms ease;
+}
+.tx-list > li:last-child .tx-li-btn { border-bottom: 0; }
+.tx-li-btn:hover { background: var(--surface-2); }
+.tx-li-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
 }
 
 /* Account transactions modal */

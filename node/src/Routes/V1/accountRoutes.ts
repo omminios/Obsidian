@@ -3,6 +3,8 @@ import {
 	getAccountById,
 	getAccountTransactions,
 	createAccount,
+	updateAccount,
+	deleteAccount,
 	removeAccount,
 	shareAccount,
 	unshareAccount,
@@ -13,6 +15,7 @@ import { validate } from "../../middleware/validate.js";
 import { idParamSchema } from "../../schemas/common.js";
 import {
 	createAccountSchema,
+	updateAccountSchema,
 	deleteAccountSchema,
 	accountTxQuerySchema,
 } from "../../schemas/accountSchemas.js";
@@ -65,7 +68,24 @@ router.post("/", validate({ body: createAccountSchema }), async (req, res) => {
 	});
 });
 
-// Delete account
+// Update an account (manual accounts only — enforced in the service)
+router.patch(
+	"/:id",
+	validate({ params: idParamSchema, body: updateAccountSchema }),
+	async (req, res) => {
+		const updated = await updateAccount(
+			req.user!.userId,
+			Number(req.params.id),
+			req.body
+		);
+		res.status(200).json({
+			message: "Account updated",
+			account: updated,
+		});
+	}
+);
+
+// Deactivate (soft delete) account — keeps history, just hides it
 router.delete(
 	"/",
 	validate({ body: deleteAccountSchema }),
@@ -75,8 +95,26 @@ router.delete(
 			req.body.account_id
 		);
 		res.status(200).json({
-			message: "Account deleted",
+			message: "Account deactivated",
 			account: deletedData,
+		});
+	}
+);
+
+// Remove an account from the dashboard (soft delete — keeps transaction history;
+// for Plaid accounts it also stops future syncing). Works for manual and Plaid
+// accounts; owner/joint only, enforced in the service.
+router.delete(
+	"/:id",
+	validate({ params: idParamSchema }),
+	async (req, res) => {
+		const deleted = await deleteAccount(
+			req.user!.userId,
+			Number(req.params.id)
+		);
+		res.status(200).json({
+			message: "Account removed",
+			account: deleted,
 		});
 	}
 );

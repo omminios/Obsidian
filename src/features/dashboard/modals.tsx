@@ -9,6 +9,7 @@ type ModalShellProps = {
 	onClose: () => void;
 	children: ReactNode;
 	footer?: ReactNode;
+	headerAction?: ReactNode;
 	width?: number;
 	"aria-label"?: string;
 };
@@ -19,6 +20,7 @@ export function ModalShell({
 	onClose,
 	children,
 	footer,
+	headerAction,
 	width = 480,
 }: ModalShellProps) {
 	useEffect(() => {
@@ -44,7 +46,9 @@ export function ModalShell({
 						<h3 className="db-modal-h">{title}</h3>
 						{sub ? <p className="db-modal-sub">{sub}</p> : null}
 					</div>
-					<button className="db-modal-x" onClick={onClose} aria-label="Close">
+					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+						{headerAction}
+						<button className="db-modal-x" onClick={onClose} aria-label="Close">
 						<svg
 							width="16"
 							height="16"
@@ -57,7 +61,8 @@ export function ModalShell({
 						>
 							<path d="M18 6L6 18M6 6l12 12" />
 						</svg>
-					</button>
+						</button>
+					</div>
 				</header>
 				<div className="db-modal-body">{children}</div>
 				{footer ? <footer className="db-modal-foot">{footer}</footer> : null}

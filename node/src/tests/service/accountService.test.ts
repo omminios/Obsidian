@@ -7,9 +7,13 @@ import {
 	seedTransaction,
 	seedAccountTransaction,
 	seedGroup,
+	pool,
 } from "../helpers/dbHelper.js";
 import { shareAccountWithGroup } from "../../repository/accountRepository.js";
-import { getAccountTransactions } from "../../services/accountService.js";
+import {
+	getAccountTransactions,
+	deleteAccount,
+} from "../../services/accountService.js";
 import { NotFoundError, AuthorizationError } from "../../errors/index.js";
 
 // Exercises the GET /api/v1/accounts/:id/transactions endpoint at the service
@@ -195,5 +199,140 @@ describe("accountService.getAccountTransactions", () => {
 		const page2 = await getAccountTransactions(user.id, null, account.id, 2, "all");
 		expect(page2.page).toBe(2);
 		expect(page2.transactions).toHaveLength(1);
+	});
+});
+
+// Exercises DELETE /api/v1/accounts/:id at the service layer — a soft delete
+// that removes an account from the dashboard (is_active = false) while keeping
+// every transaction row for data integrity. Works for both manual and Plaid
+// accounts; for Plaid accounts the inactive flag is also what stops future
+// syncing (see transactionsSyncService). Covers the authorization gate
+// (owner/joint only) and that history is preserved.
+describe("accountService.deleteAccount", () => {
+	beforeEach(async () => {
+		await truncateAll();
+	});
+
+	// Seed N transactions linked to an account; returns the txn rows.
+	async function linkTxns(accountId: number, userId: number, count: number) {
+		const txns = [];
+		for (let i = 0; i < count; i++) {
+			const txn = await seedTransaction(userId, {
+				amount: -10 - i,
+				merchant_name: `Txn ${i}`,
+				transaction_date: `2026-01-${String(i + 1).padStart(2, "0")}`,
+			});
+			await seedAccountTransaction(accountId, txn.id, "debit");
+			txns.push(txn);
+		}
+		return txns;
+	}
+
+	async function countRows(table: string, accountId: number) {
+		const res = await pool.query(
+			`SELECT COUNT(*)::int AS n FROM ${table} WHERE account_id = $1`,
+			[accountId]
+		);
+		return res.rows[0].n as number;
+	}
+
+	async function isActive(accountId: number) {
+		const res = await pool.query(
+			"SELECT is_active FROM accounts WHERE id = $1",
+			[accountId]
+		);
+		return res.rows[0]?.is_active as boolean | undefined;
+	}
+
+	it("soft-deletes a manual account and keeps its transaction history", async () => {
+		const user = await seedUser();
+		const group = await seedGroup(user.id);
+		const account = await seedAccount(user.id);
+		await seedAccountMember(account.id, user.id, "owner");
+		await shareAccountWithGroup(account.id, group.id);
+		const txns = await linkTxns(account.id, user.id, 3);
+
+		const deleted = await deleteAccount(user.id, account.id);
+		expect(deleted.id).toBe(account.id);
+
+		// Account row still exists but is no longer active (drops off the lists).
+		expect(await isActive(account.id)).toBe(false);
+
+		// All history is preserved: join rows and the underlying transactions stay.
+		expect(await countRows("account_transactions", account.id)).toBe(3);
+		const remaining = await pool.query(
+			"SELECT COUNT(*)::int AS n FROM transactions WHERE id = ANY($1)",
+			[txns.map((t) => t.id)]
+		);
+		expect(remaining.rows[0].n).toBe(3);
+	});
+
+	it("soft-deletes a Plaid account and keeps its transaction history", async () => {
+		const user = await seedUser();
+		await seedGroup(user.id);
+		const account = await seedAccount(user.id);
+		// Mark it as Plaid-linked.
+		await pool.query(
+			"UPDATE accounts SET plaid_account_id = $2 WHERE id = $1",
+			[account.id, "plaid_acct_test_123"]
+		);
+		await seedAccountMember(account.id, user.id, "owner");
+		const txns = await linkTxns(account.id, user.id, 2);
+
+		const deleted = await deleteAccount(user.id, account.id);
+		expect(deleted.id).toBe(account.id);
+
+		// Inactive now — this is what makes the sync skip it going forward.
+		expect(await isActive(account.id)).toBe(false);
+
+		// History preserved.
+		expect(await countRows("account_transactions", account.id)).toBe(2);
+		const remaining = await pool.query(
+			"SELECT COUNT(*)::int AS n FROM transactions WHERE id = ANY($1)",
+			[txns.map((t) => t.id)]
+		);
+		expect(remaining.rows[0].n).toBe(2);
+	});
+
+	it("rejects deletion by an authorized_user (non owner/joint)", async () => {
+		const owner = await seedUser();
+		await seedGroup(owner.id);
+		const account = await seedAccount(owner.id);
+		await seedAccountMember(account.id, owner.id, "owner");
+
+		// A second user with only authorized_user access.
+		const authUser = await seedUser({
+			email: "auth@example.com",
+			username: "authuser",
+		});
+		await seedAccountMember(account.id, authUser.id, "authorized_user");
+
+		await expect(deleteAccount(authUser.id, account.id)).rejects.toThrow(
+			AuthorizationError
+		);
+		const acct = await pool.query("SELECT 1 FROM accounts WHERE id = $1", [
+			account.id,
+		]);
+		expect(acct.rowCount).toBe(1);
+	});
+
+	it("throws AuthorizationError when the caller is not a member", async () => {
+		const owner = await seedUser();
+		const account = await seedAccount(owner.id);
+		await seedAccountMember(account.id, owner.id, "owner");
+
+		const stranger = await seedUser({
+			email: "stranger@example.com",
+			username: "stranger",
+		});
+
+		await expect(
+			deleteAccount(stranger.id, account.id)
+		).rejects.toThrow(AuthorizationError);
+	});
+
+	it("throws NotFoundError for a non-existent account", async () => {
+		const user = await seedUser();
+		await expect(deleteAccount(user.id, 99999)).rejects.toThrow(NotFoundError);
 	});
 });

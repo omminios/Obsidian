@@ -125,7 +125,72 @@ export const newAccount = async (
 	}
 };
 
-// Soft delete - preserves transaction history
+// Update a manually-entered account. Guarded by `plaid_account_id IS NULL` in the
+// WHERE clause so a Plaid-linked account can never be edited here (returns
+// undefined if the row is Plaid-linked or doesn't exist). Fields are COALESCEd,
+// so only the values actually sent are changed. Balances on Plaid accounts are
+// owned by the sync feed; manual accounts have no feed, so editing them by hand
+// is the only way they change.
+export const updateManualAccount = async (
+	accountId: number,
+	data: {
+		account_name?: string;
+		type?: string | null;
+		subtype?: string | null;
+		institution_name?: string | null;
+		last_four?: string | null;
+		balance_current?: number | null;
+	}
+): Promise<Account | undefined> => {
+	try {
+		const res = await pool.query(
+			`UPDATE accounts
+				SET account_name = COALESCE($2, account_name),
+				    type = COALESCE($3, type),
+				    subtype = COALESCE($4, subtype),
+				    institution_name = COALESCE($5, institution_name),
+				    last_four = COALESCE($6, last_four),
+				    balance_current = COALESCE($7, balance_current),
+				    updated_at = NOW()
+			WHERE id = $1 AND plaid_account_id IS NULL
+			RETURNING *`,
+			[
+				accountId,
+				data.account_name ?? null,
+				data.type ?? null,
+				data.subtype ?? null,
+				data.institution_name ?? null,
+				data.last_four ?? null,
+				data.balance_current ?? null,
+			]
+		);
+		return res.rows[0];
+	} catch (e) {
+		if (isPostgresError(e)) {
+			if (e.code === "23502") {
+				throw new ValidationError("Required field is missing", {
+					column: e.column,
+				});
+			}
+			if (e.code === "23514") {
+				throw new ValidationError("Invalid account type", {
+					constraint: e.constraint,
+				});
+			}
+		}
+		throw new DatabaseError("Failed to update account", {
+			accountId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
+// Soft delete - preserves transaction history. Sets is_active = false so the
+// account drops out of the dashboard account lists (getMyDashboardAccounts /
+// getGroupDashboardAccounts both filter is_active = true) while every
+// transactions row stays intact for data integrity. For Plaid accounts this is
+// also what stops future syncing: syncTransactions only links incoming
+// transactions to accounts that are is_active = true.
 export const deactivateAccount = async (
 	accountId: number
 ): Promise<Account | undefined> => {

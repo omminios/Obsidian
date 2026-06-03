@@ -12,6 +12,13 @@ export type Transaction = {
 	acct: string;
 	positive?: boolean;
 	who?: string;
+	// Edit support — carried through so a manual transaction can be opened in the
+	// editor pre-filled. `editable` is true only for manually-entered rows.
+	id: number;
+	editable: boolean;
+	accountId: number;
+	dateISO: string;
+	categoryRaw: string | null;
 };
 
 export type View = {
@@ -158,6 +165,11 @@ export function buildTransactions(
 			acct,
 			positive: amt > 0,
 			who: showOwner && gt.owner_first_name ? gt.owner_first_name[0] : undefined,
+			id: t.id,
+			editable: t.entry_method === "manual",
+			accountId: t.account_id,
+			dateISO: (t.transaction_date ?? "").slice(0, 10),
+			categoryRaw: t.category,
 		};
 	});
 }

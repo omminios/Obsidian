@@ -39,6 +39,32 @@ export const createAccountSchema = z
 		}
 	});
 
+// Editable fields on a manually-entered account. All optional — the route
+// applies only what's sent (the repository COALESCEs the rest). Same type/subtype
+// validity rule as create.
+export const updateAccountSchema = z
+	.object({
+		account_name: z.string().min(1).max(255).optional(),
+		type: z.enum(ACCOUNT_TYPES).optional(),
+		subtype: z.string().min(1).max(50).nullish(),
+		institution_name: z.string().max(255).nullish(),
+		last_four: z.string().length(4).nullish(),
+		balance_current: z.number().nullish(),
+	})
+	.superRefine((data, ctx) => {
+		if (
+			data.type &&
+			data.subtype &&
+			!ACCOUNT_SUBTYPES[data.type].includes(data.subtype)
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["subtype"],
+				message: `Invalid subtype "${data.subtype}" for type "${data.type}"`,
+			});
+		}
+	});
+
 export const deleteAccountSchema = z.object({
 	account_id: z.number().int().positive(),
 });

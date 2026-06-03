@@ -2,6 +2,7 @@ import {
 	getAllAccounts,
 	findById,
 	newAccount,
+	updateManualAccount,
 	deactivateAccount,
 	getAccountMembership,
 	isAccountVisibleToGroup,
@@ -85,6 +86,82 @@ export const createAccount = async (
 ) => {
 	const account = await newAccount(accountData, groupId);
 	return account;
+};
+
+// Update a manually-entered account. Only an owner or joint holder may edit, and
+// only manual accounts are editable — Plaid-linked accounts are owned by the sync
+// feed and would be overwritten on the next sync.
+export const updateAccount = async (
+	userId: number,
+	accountId: number,
+	data: {
+		account_name?: string;
+		type?: string | null;
+		subtype?: string | null;
+		institution_name?: string | null;
+		last_four?: string | null;
+		balance_current?: number | null;
+	}
+) => {
+	const account = await findById(accountId);
+	if (!account) {
+		throw new NotFoundError("Account", String(accountId));
+	}
+
+	const membership = await getAccountMembership(userId, accountId);
+	if (!membership) {
+		throw new AuthorizationError("No access to this account");
+	}
+	if (
+		membership.ownership_type !== "owner" &&
+		membership.ownership_type !== "joint"
+	) {
+		throw new AuthorizationError("Only the account owner can edit this account");
+	}
+	if (account.plaid_account_id !== null) {
+		throw new AuthorizationError(
+			"Only manually-added accounts can be edited"
+		);
+	}
+
+	const updated = await updateManualAccount(accountId, data);
+	if (!updated) {
+		throw new NotFoundError("Account", String(accountId));
+	}
+	return updated;
+};
+
+// Remove an account from the dashboard. This is a soft delete (is_active =
+// false), not a hard delete: the account row and all of its transaction history
+// are preserved for data integrity, the account simply stops appearing in the
+// account lists. Works for both manual and Plaid accounts — for Plaid accounts
+// it additionally stops future syncing, because syncTransactions only writes
+// transactions for accounts that are still is_active. Only an owner or joint
+// holder may remove an account; authorized users cannot.
+export const deleteAccount = async (userId: number, accountId: number) => {
+	const account = await findById(accountId);
+	if (!account) {
+		throw new NotFoundError("Account", String(accountId));
+	}
+
+	const membership = await getAccountMembership(userId, accountId);
+	if (!membership) {
+		throw new AuthorizationError("No access to this account");
+	}
+	if (
+		membership.ownership_type !== "owner" &&
+		membership.ownership_type !== "joint"
+	) {
+		throw new AuthorizationError(
+			"Only the account owner can delete this account"
+		);
+	}
+
+	const deleted = await deactivateAccount(accountId);
+	if (!deleted) {
+		throw new NotFoundError("Account", String(accountId));
+	}
+	return deleted;
 };
 
 // Deactivate account. Keeps account but is no longer visible and keeps history

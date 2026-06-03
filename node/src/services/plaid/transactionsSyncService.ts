@@ -58,6 +58,20 @@ export const syncTransactions = async (
 		// and negative=outflow (purchases, withdrawals). Every consumer below
 		// the Plaid sync layer sees the "natural" personal-finance sign.
 		for (const tx of added) {
+			// Resolve the destination account FIRST and require it to still be
+			// active. If the account was removed (soft-deleted, is_active = false)
+			// or never existed, we skip the transaction entirely — no transactions
+			// row is written. This is what makes "delete an account" stop syncing:
+			// a deactivated account silently drops all future Plaid transactions,
+			// and we never create an orphan transactions row with no
+			// account_transactions link.
+			const acctRes = await client.query(
+				`SELECT id FROM accounts WHERE plaid_account_id = $1 AND is_active = true`,
+				[tx.account_id]
+			);
+			if (acctRes.rows.length === 0) continue;
+			const acctRowId: number = acctRes.rows[0].id;
+
 			const category =
 				tx.personal_finance_category?.primary ??
 				tx.category?.[0] ??
@@ -83,13 +97,6 @@ export const syncTransactions = async (
 			);
 			if (txRes.rows.length === 0) continue;
 			const txRowId: number = txRes.rows[0].id;
-
-			const acctRes = await client.query(
-				`SELECT id FROM accounts WHERE plaid_account_id = $1`,
-				[tx.account_id]
-			);
-			if (acctRes.rows.length === 0) continue;
-			const acctRowId: number = acctRes.rows[0].id;
 
 			// debit = money out of the account, credit = money in.
 			const transactionType = storedAmount < 0 ? "debit" : "credit";

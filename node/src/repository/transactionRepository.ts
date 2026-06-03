@@ -157,6 +157,96 @@ export const createManualTransaction = async (
 	}
 };
 
+// Update a manually-entered transaction and keep its account link in sync, in one
+// transaction. Guarded by `entry_method = 'manual'` in the WHERE clause so a Plaid
+// transaction can never be edited here (returns undefined if the row isn't manual).
+// Fields are COALESCEd, so only the values actually sent are changed. After the
+// update, account_transactions.transaction_type is recomputed from the new amount
+// sign (negative = debit / outflow, positive = credit / inflow), and the link is
+// repointed when accountId moves the transaction to a different account.
+export const updateManualTransaction = async (
+	id: number,
+	data: {
+		transaction_date?: string | null;
+		amount?: number | null;
+		category?: string | null;
+		merchant_name?: string | null;
+		description?: string | null;
+	},
+	accountId?: number
+): Promise<Transaction | undefined> => {
+	const client = await pool.connect();
+	try {
+		await client.query("BEGIN");
+
+		const res = await client.query(
+			`UPDATE transactions
+				SET transaction_date = COALESCE($2, transaction_date),
+				    amount = COALESCE($3, amount),
+				    category = COALESCE($4, category),
+				    merchant_name = COALESCE($5, merchant_name),
+				    description = COALESCE($6, description),
+				    updated_at = NOW()
+			WHERE id = $1 AND entry_method = 'manual'
+			RETURNING *`,
+			[
+				id,
+				data.transaction_date ?? null,
+				data.amount ?? null,
+				data.category ?? null,
+				data.merchant_name ?? null,
+				data.description ?? null,
+			]
+		);
+		const transaction: Transaction | undefined = res.rows[0];
+		if (!transaction) {
+			await client.query("ROLLBACK");
+			return undefined;
+		}
+
+		const transactionType = Number(transaction.amount) < 0 ? "debit" : "credit";
+		if (accountId != null) {
+			await client.query(
+				`UPDATE account_transactions
+					SET account_id = $1, transaction_type = $2
+				WHERE transaction_id = $3`,
+				[accountId, transactionType, id]
+			);
+		} else {
+			await client.query(
+				`UPDATE account_transactions
+					SET transaction_type = $1
+				WHERE transaction_id = $2`,
+				[transactionType, id]
+			);
+		}
+
+		await client.query("COMMIT");
+		return transaction;
+	} catch (e) {
+		await client.query("ROLLBACK");
+		if (isPostgresError(e)) {
+			if (e.code === "23502") {
+				throw new ValidationError("Required field is missing", {
+					column: e.column,
+				});
+			}
+			if (e.code === "23503") {
+				throw new ConflictError("Referenced account does not exist", {
+					constraint: e.constraint,
+					detail: e.details,
+				});
+			}
+		}
+		throw new DatabaseError("Failed to update transaction", {
+			transactionId: id,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	} finally {
+		client.release();
+	}
+};
+
 // Delete Transactions
 export const deleteTransaction = async (
 	transactionId: number

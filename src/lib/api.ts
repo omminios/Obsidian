@@ -29,6 +29,7 @@ export type DashboardSummary = {
 		last_four: string | null;
 		balance_current: number | null;
 		balance_available: number | null;
+		is_manual: boolean;
 	}>;
 	group_accounts: Array<{
 		id: number;
@@ -39,6 +40,7 @@ export type DashboardSummary = {
 		last_four: string | null;
 		balance_current: number | null;
 		balance_available: number | null;
+		is_manual: boolean;
 		owner_id: number;
 		owner_first_name: string;
 		owner_last_name: string;
@@ -50,6 +52,8 @@ export type DashboardSummary = {
 		description: string | null;
 		category: string | null;
 		merchant_name: string | null;
+		entry_method: string;
+		account_id: number;
 		account_name: string;
 		institution_name: string | null;
 		last_four: string | null;
@@ -61,6 +65,8 @@ export type DashboardSummary = {
 		description: string | null;
 		category: string | null;
 		merchant_name: string | null;
+		entry_method: string;
+		account_id: number;
 		account_name: string;
 		institution_name: string | null;
 		last_four: string | null;
@@ -315,6 +321,68 @@ export const api = {
 		}>("/api/v1/transactions/", {
 			method: "POST",
 			body: JSON.stringify(data),
+		}),
+
+	updateTransaction: (
+		id: number,
+		data: {
+			account_id?: number;
+			transaction_date?: string;
+			amount?: number;
+			merchant_name?: string | null;
+			category?: string | null;
+			description?: string | null;
+		}
+	) =>
+		request<{
+			message: string;
+			transaction: {
+				id: number;
+				transaction_date: string;
+				amount: number;
+				merchant_name: string | null;
+				category: string | null;
+			};
+		}>(`/api/v1/transactions/${id}`, {
+			method: "PATCH",
+			body: JSON.stringify(data),
+		}),
+
+	deleteTransaction: (id: number) =>
+		request<{ message: string }>("/api/v1/transactions/", {
+			method: "DELETE",
+			body: JSON.stringify({ id }),
+		}),
+
+	updateManualAccount: (
+		id: number,
+		data: {
+			account_name?: string;
+			type?: string;
+			subtype?: string | null;
+			institution_name?: string | null;
+			last_four?: string | null;
+			balance_current?: number | null;
+		}
+	) =>
+		request<{
+			message: string;
+			account: {
+				id: number;
+				account_name: string;
+				type: string;
+				subtype: string | null;
+			};
+		}>(`/api/v1/accounts/${id}`, {
+			method: "PATCH",
+			body: JSON.stringify(data),
+		}),
+
+	// Remove an account (soft delete). Keeps its transaction history; for Plaid
+	// accounts it also stops future syncing.
+	deleteAccount: (id: number) =>
+		request<{ message: string }>(`/api/v1/accounts/${id}`, {
+			method: "DELETE",
 		}),
 
 	triggerSync: () =>

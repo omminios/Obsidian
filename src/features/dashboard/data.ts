@@ -1,8 +1,17 @@
 import type { DashboardSummary } from "../../lib/api";
 
-export type Month = { m: string; inc: number; spend: number };
+// `m` is the short label shown on chart axes ("Jun"); `key` is the full
+// "Mon YYYY" label used to match a month against the per-month category data
+// when slicing the pie to a timeframe (two same-named months from different
+// years would otherwise collide).
+export type Month = { m: string; key: string; inc: number; spend: number };
 
 export type Category = { name: string; v: number; c: string };
+
+// One spending-by-category row for a single month ("Mon YYYY"), as returned by
+// the dashboard summary over a rolling 12-month window. Aggregated client-side
+// into Category[] for whatever timeframe the user selects — see sliceCategories.
+export type MonthlyCategory = { month: string; category: string; total: number };
 
 export type Transaction = {
 	d: string;
@@ -25,7 +34,10 @@ export type View = {
 	name: string;
 	role: string;
 	months: Month[];
-	categories: Category[];
+	// Per-month spending-by-category rows for the full 12-month window. The
+	// timeframe-specific Category[] for the pie is derived on demand via
+	// sliceCategories(view.categoriesByMonth, slice.months).
+	categoriesByMonth: MonthlyCategory[];
 	tx: Transaction[];
 };
 
@@ -51,13 +63,16 @@ export type GroupView = {
 	role: string;
 };
 
-export type RangeKey = "1M" | "3M" | "6M" | "1Y";
+export type RangeKey = "1M" | "3M" | "6M" | "1Y" | "5Y" | "ALL";
 
 export const RANGES: Record<RangeKey, { months: number; label: string }> = {
 	"1M": { months: 1, label: "Last month" },
 	"3M": { months: 3, label: "Last 3 months" },
 	"6M": { months: 6, label: "Last 6 months" },
 	"1Y": { months: 12, label: "Last 12 months" },
+	"5Y": { months: 60, label: "Last 5 years" },
+	// All time — slice(-Infinity) clamps to the start and returns every month.
+	"ALL": { months: Infinity, label: "All time" },
 };
 
 export type Slice = {
@@ -72,6 +87,41 @@ export function sliceMonths(view: View, range: RangeKey): Slice {
 	const inc = months.reduce((a, b) => a + b.inc, 0);
 	const spend = months.reduce((a, b) => a + b.spend, 0);
 	return { months, inc, spend, savings: inc - spend };
+}
+
+// Aggregate the per-month category rows down to a single timeframe-wide
+// breakdown for the pie chart, scoped to exactly the months the slice covers so
+// the pie stays in lock-step with the line/bar charts. Categories are summed
+// across the in-range months and sorted by spend descending. The palette holds
+// six colors, so the top five are shown individually and the remaining tail is
+// rolled into a single "Other" slice — keeping the pie's total equal to the
+// real in-range spend rather than silently dropping the smallest categories.
+export function sliceCategories(monthly: MonthlyCategory[], months: Month[]): Category[] {
+	const inRange = new Set(months.map((m) => m.key));
+	const totals = new Map<string, number>();
+	for (const row of monthly) {
+		if (!inRange.has(row.month)) continue;
+		totals.set(row.category, (totals.get(row.category) ?? 0) + Number(row.total ?? 0));
+	}
+
+	const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+	const TOP = CAT_COLORS.length - 1; // reserve the last color for the "Other" roll-up
+	const categories: Category[] = ranked.slice(0, TOP).map(([name, v], i) => ({
+		name,
+		v,
+		c: CAT_COLORS[i],
+	}));
+
+	const tailTotal = ranked.slice(TOP).reduce((s, [, v]) => s + v, 0);
+	if (tailTotal > 0) {
+		// The SQL buckets null categories under "Other", so one may already be in
+		// the top slice — fold the tail into it rather than emitting a duplicate.
+		const existing = categories.find((c) => c.name === "Other");
+		if (existing) existing.v += tailTotal;
+		else categories.push({ name: "Other", v: tailTotal, c: CAT_COLORS[CAT_COLORS.length - 1] });
+	}
+
+	return categories;
 }
 
 export function fmt(n: number, opts: { signed?: boolean; cents?: boolean } = {}): string {
@@ -117,16 +167,23 @@ function effectiveBal(bal: number | null, type: string): number {
 function buildMonths(monthly: Array<{ month: string; income: number; spending: number }>): Month[] {
 	return monthly.map((m) => ({
 		m: m.month.split(" ")[0],
+		key: m.month,
 		inc: m.income,
 		spend: m.spending,
 	}));
 }
 
-function buildCategories(categories: Array<{ category: string; total: number }>): Category[] {
-	return categories.map((c, i) => ({
-		name: c.category,
-		v: c.total,
-		c: CAT_COLORS[i % CAT_COLORS.length],
+// Pass the per-month category rows through as-is (coercing totals to numbers, in
+// case pg ever serializes NUMERIC as a string). The timeframe roll-up into a
+// colored Category[] happens later in sliceCategories, once the active range is
+// known.
+function buildMonthlyCategories(
+	categories: Array<{ month: string; category: string; total: number }>
+): MonthlyCategory[] {
+	return categories.map((c) => ({
+		month: c.month,
+		category: c.category,
+		total: Number(c.total ?? 0),
 	}));
 }
 
@@ -180,7 +237,7 @@ export function buildDashboardView(summary: DashboardSummary, viewKey: string): 
 			name: summary.group?.name ?? "Household",
 			role: "Group",
 			months: buildMonths(summary.group_monthly),
-			categories: buildCategories(summary.group_categories),
+			categoriesByMonth: buildMonthlyCategories(summary.group_categories),
 			tx: buildTransactions(summary.group_transactions, true),
 		};
 	}
@@ -191,7 +248,7 @@ export function buildDashboardView(summary: DashboardSummary, viewKey: string): 
 			name: `${u.first_name} ${u.last_name}`,
 			role: "You",
 			months: buildMonths(summary.my_monthly),
-			categories: buildCategories(summary.my_categories),
+			categoriesByMonth: buildMonthlyCategories(summary.my_categories),
 			tx: buildTransactions(summary.my_transactions, false),
 		};
 	}
@@ -205,7 +262,7 @@ export function buildDashboardView(summary: DashboardSummary, viewKey: string): 
 		name: member ? `${member.first_name} ${member.last_name}` : "Member",
 		role: member?.role ? cap(member.role) : "Member",
 		months: buildMonths(member?.monthly ?? []),
-		categories: buildCategories(member?.categories ?? []),
+		categoriesByMonth: buildMonthlyCategories(member?.categories ?? []),
 		tx: buildTransactions(memberTxs, false),
 	};
 }

@@ -22,7 +22,12 @@ export interface DashboardMonthly {
 	spending: number;
 }
 
-export interface DashboardCategory {
+// A spending-by-category row scoped to a single calendar month. The dashboard
+// returns these for a rolling 12-month window so the frontend can aggregate the
+// categories that fall inside whatever timeframe (1M/3M/6M/1Y) the user picks —
+// the same client-side slicing the monthly income/spending data uses.
+export interface DashboardMonthlyCategory {
+	month: string;
 	category: string;
 	total: number;
 }
@@ -33,7 +38,7 @@ export interface DashboardMember {
 	last_name: string;
 	role: string;
 	monthly: DashboardMonthly[];
-	categories: DashboardCategory[];
+	categories: DashboardMonthlyCategory[];
 }
 
 export interface DashboardAccount {
@@ -463,8 +468,10 @@ export const getGroupDashboardTransactions = async (
 	}
 };
 
-// Returns a rolling 12-month income vs. spending breakdown for a single user,
-// grouped by calendar month and ordered oldest-to-newest for charting.
+// Returns the full income vs. spending history for a single user, grouped by
+// calendar month and ordered oldest-to-newest for charting. The frontend slices
+// this to the selected timeframe (1M…5Y/all time), so the full history is
+// returned rather than a fixed rolling window.
 // Income = positive amounts (deposits, refunds), spending = absolute value of
 // negative amounts (purchases, withdrawals) — matches the sign convention in
 // the transactions table (positive = inflow, negative = outflow).
@@ -479,7 +486,6 @@ export const getUserDashboardMonthly = async (userId: number): Promise<Dashboard
 			   COALESCE(SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END), 0)::float AS spending
 			 FROM transactions t
 			 WHERE t.user_id = $1
-			   AND t.transaction_date >= DATE_TRUNC('month', NOW() - INTERVAL '11 months')
 			 GROUP BY month_start, 1
 			 ORDER BY month_start`,
 			[userId]
@@ -497,7 +503,7 @@ export const getUserDashboardMonthly = async (userId: number): Promise<Dashboard
 	}
 };
 
-// Same 12-month income vs. spending breakdown as getUserDashboardMonthly, but
+// Same full income vs. spending history as getUserDashboardMonthly, but
 // aggregated across all accounts shared with the group via account_group_visibility.
 // Reflects the household's combined financial picture, not any single member's.
 export const getGroupDashboardMonthly = async (groupId: number): Promise<DashboardMonthly[]> => {
@@ -512,7 +518,6 @@ export const getGroupDashboardMonthly = async (groupId: number): Promise<Dashboa
 			 JOIN account_transactions akt ON t.id = akt.transaction_id
 			 JOIN account_group_visibility agv ON agv.account_id = akt.account_id
 			 WHERE agv.group_id = $1
-			   AND t.transaction_date >= DATE_TRUNC('month', NOW() - INTERVAL '11 months')
 			 GROUP BY month_start, 1
 			 ORDER BY month_start`,
 			[groupId]
@@ -530,26 +535,34 @@ export const getGroupDashboardMonthly = async (groupId: number): Promise<Dashboa
 	}
 };
 
-// Returns the top 10 spending categories for a single user over the last 30 days,
-// ordered by total spend descending. Only outflow transactions (amount < 0) are
-// counted; amounts are stored as absolute values for display. Null categories
-// are bucketed under "Other".
-export const getUserDashboardCategories = async (userId: number): Promise<DashboardCategory[]> => {
+// Returns a per-month spending-by-category breakdown for a single user across
+// the full transaction history (the same months as getUserDashboardMonthly, so
+// the 'Mon YYYY' labels line up). Only outflow transactions (amount < 0) are
+// counted; amounts are stored as absolute values for display, and null
+// categories are bucketed under "Other". The frontend sums the rows whose month
+// falls inside the selected timeframe to build the pie chart — there is no
+// top-N cap here because the bounded Plaid category set keeps the row count
+// small (a handful of categories per month).
+export const getUserDashboardCategories = async (userId: number): Promise<DashboardMonthlyCategory[]> => {
 	try {
 		const res = await pool.query(
 			`SELECT
+			   TO_CHAR(DATE_TRUNC('month', t.transaction_date), 'Mon YYYY') AS month,
+			   DATE_TRUNC('month', t.transaction_date) AS month_start,
 			   COALESCE(t.category, 'Other') AS category,
 			   SUM(ABS(t.amount))::float AS total
 			 FROM transactions t
 			 WHERE t.user_id = $1
 			   AND t.amount < 0
-			   AND t.transaction_date >= NOW() - INTERVAL '30 days'
-			 GROUP BY 1
-			 ORDER BY 2 DESC
-			 LIMIT 10`,
+			 GROUP BY DATE_TRUNC('month', t.transaction_date), COALESCE(t.category, 'Other')
+			 ORDER BY month_start, total DESC`,
 			[userId]
 		);
-		return res.rows;
+		return res.rows.map((r) => ({
+			month: r.month as string,
+			category: r.category as string,
+			total: r.total as number,
+		}));
 	} catch (e) {
 		throw new DatabaseError("Failed to fetch user categories", {
 			userId,
@@ -558,13 +571,15 @@ export const getUserDashboardCategories = async (userId: number): Promise<Dashbo
 	}
 };
 
-// Same top-10 spending categories breakdown as getUserDashboardCategories, but
+// Same per-month spending-by-category breakdown as getUserDashboardCategories, but
 // aggregated across all accounts shared with the group via account_group_visibility.
-// Gives a household-level view of where money is being spent in the last 30 days.
-export const getGroupDashboardCategories = async (groupId: number): Promise<DashboardCategory[]> => {
+// Gives a household-level view of where money is being spent, month by month.
+export const getGroupDashboardCategories = async (groupId: number): Promise<DashboardMonthlyCategory[]> => {
 	try {
 		const res = await pool.query(
 			`SELECT
+			   TO_CHAR(DATE_TRUNC('month', t.transaction_date), 'Mon YYYY') AS month,
+			   DATE_TRUNC('month', t.transaction_date) AS month_start,
 			   COALESCE(t.category, 'Other') AS category,
 			   SUM(ABS(t.amount))::float AS total
 			 FROM transactions t
@@ -572,13 +587,15 @@ export const getGroupDashboardCategories = async (groupId: number): Promise<Dash
 			 JOIN account_group_visibility agv ON agv.account_id = akt.account_id
 			 WHERE agv.group_id = $1
 			   AND t.amount < 0
-			   AND t.transaction_date >= NOW() - INTERVAL '30 days'
-			 GROUP BY 1
-			 ORDER BY 2 DESC
-			 LIMIT 10`,
+			 GROUP BY DATE_TRUNC('month', t.transaction_date), COALESCE(t.category, 'Other')
+			 ORDER BY month_start, total DESC`,
 			[groupId]
 		);
-		return res.rows;
+		return res.rows.map((r) => ({
+			month: r.month as string,
+			category: r.category as string,
+			total: r.total as number,
+		}));
 	} catch (e) {
 		throw new DatabaseError("Failed to fetch group categories", {
 			groupId,

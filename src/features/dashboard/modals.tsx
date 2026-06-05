@@ -277,6 +277,12 @@ export function SettingsModal({
 	const [nameErr, setNameErr] = useState("");
 	const [groupErr, setGroupErr] = useState("");
 
+	// "Sign out of all sessions" — reuses the logout flow, which revokes every
+	// one of the user's refresh tokens server-side (revokeAllUserRefreshTokens)
+	// and clears this device's cookies, then redirects. Gated behind a confirm.
+	const [confirmRevoke, setConfirmRevoke] = useState(false);
+	const [revoking, setRevoking] = useState(false);
+
 	// Persist any pending display-name and household-rename changes, then close.
 	// Unchanged values (and, for the household, non-creators) are no-ops. Keeps
 	// the modal open on failure so the relevant error is visible.
@@ -492,13 +498,46 @@ export function SettingsModal({
 								</div>
 								<span className="db-pill">Off</span>
 							</button>
-							<button className="db-link-row">
+							<button
+								className="db-link-row"
+								onClick={() => setConfirmRevoke((v) => !v)}
+							>
 								<div>
 									<div className="db-link-row-t">Active sessions</div>
-									<div className="db-link-row-d">2 devices · sign out of all.</div>
+									<div className="db-link-row-d">
+										Sign out of all devices.
+									</div>
 								</div>
 								<IconArrow size={14} />
 							</button>
+							{confirmRevoke ? (
+								<div className="db-warn">
+									<strong>Sign out of all sessions?</strong> This revokes
+									every active session — other devices and this one. You'll
+									need to log in again everywhere.
+									<div
+										style={{ display: "flex", gap: 8, marginTop: 12 }}
+									>
+										<button
+											className="btn btn-ghost"
+											onClick={() => setConfirmRevoke(false)}
+											disabled={revoking}
+										>
+											Cancel
+										</button>
+										<button
+											className="btn btn-danger-solid"
+											onClick={() => {
+												setRevoking(true);
+												onLogout();
+											}}
+											disabled={revoking}
+										>
+											{revoking ? "Signing out…" : "Sign out everywhere"}
+										</button>
+									</div>
+								</div>
+							) : null}
 						</>
 					) : null}
 				</div>

@@ -382,7 +382,44 @@
   .pie-wrap { grid-template-columns: 1fr; justify-items: center; }
 }
 .pie-svg { display: block; }
-.pie-slice { cursor: pointer; }
+
+/* Donut canvas + centered readout (total by default, active slice on hover) */
+.pie-canvas { position: relative; }
+.pie-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none; /* never block hover/click on the sectors beneath */
+  text-align: center;
+}
+.pie-center-cap {
+  max-width: 116px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pie-center-v { font-size: 19px; font-weight: 700; color: var(--ink); line-height: 1.25; }
+.pie-center-pct,
+.pie-center-sub { font-size: 11px; color: var(--ink-4); }
+
+.pie-slice { cursor: pointer; transition: opacity 140ms ease; }
+
+/* Selecting a sector focuses its <path>, which otherwise draws a hard rectangle
+   around the chart. Suppress it — the enlarged sector + outer ring is the
+   selection affordance. */
+.pie-canvas :focus,
+.pie-canvas :focus-visible,
+.pie-canvas .recharts-sector:focus,
+.pie-canvas .recharts-surface:focus { outline: none; }
+
 .pie-legend {
   display: flex; flex-direction: column;
   gap: 6px;
@@ -400,10 +437,62 @@
   cursor: pointer;
 }
 .pie-legend li:hover { background: var(--surface-2); }
-.pie-legend li.dim { opacity: 0.4; }
+.pie-legend li.active { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--ink-3); }
+.pie-legend li.dim { opacity: 0.45; }
 .pie-legend-name { font-weight: 500; color: var(--ink); }
 .pie-legend-pct  { font-size: 11.5px; color: var(--ink-4); min-width: 44px; text-align: right; }
 .pie-legend-v    { font-size: 12.5px; color: var(--ink); min-width: 64px; text-align: right; }
+.pie-legend-total {
+  grid-template-columns: 1fr auto;
+  margin-bottom: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  cursor: default;
+}
+.pie-legend-total:hover { background: transparent; }
+.pie-legend-total .pie-legend-name { color: var(--ink-3); font-weight: 600; font-size: 12px; letter-spacing: 0.02em; }
+
+/* =====================================================
+   Recharts theming + custom tooltip
+   ===================================================== */
+.chart-empty {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 280px;
+  color: var(--ink-4);
+  font-size: 13px;
+}
+/* Axis labels + grid pick up theme tokens (var() can't be passed as an SVG
+   presentation attribute, so series colors are set in JS — these are CSS). */
+.recharts-cartesian-axis-tick-value { fill: var(--ink-4); }
+.rc-grid line { stroke: var(--line-soft); }
+.recharts-legend-item-text { color: var(--ink-3) !important; }
+
+.rc-tip {
+  background: var(--ink);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  box-shadow: var(--shadow);
+  min-width: 130px;
+}
+.rc-tip-title {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 5px;
+}
+.rc-tip-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 7px;
+  line-height: 1.7;
+}
+.rc-tip-dot { width: 8px; height: 8px; border-radius: 50%; }
+.rc-tip-label { color: rgba(255, 255, 255, 0.85); }
+.rc-tip-val { color: #fff; font-weight: 600; }
 
 /* =====================================================
    Lower row

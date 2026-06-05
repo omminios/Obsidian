@@ -29,7 +29,10 @@
       "PowerShell(taskkill /PID 34860 /T /F)",
       "Bash(find . -type d -iname \"*private_helper*\" -not -path \"*/node_modules/*\")",
       "Bash(find . -type d -iname \"*markdown*\" -not -path \"*/node_modules/*\")",
-      "Bash(unzip -l Obsidian.zip)"
+      "Bash(unzip -l Obsidian.zip)",
+      "Bash(node -e \"console.log\\(require\\('recharts/package.json'\\).version\\)\")",
+      "Bash(sed -n '1,80p' node_modules/recharts/types/polar/Pie.d.ts)",
+      "Bash(npx eslint *)"
     ]
   }
 }

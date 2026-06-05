@@ -1,303 +1,297 @@
-import { useMemo, useRef, useState, type MouseEvent } from "react";
-import type { Category, Month } from "./data";
+import { useMemo, useState } from "react";
+import {
+	Area,
+	Bar,
+	BarChart as RBarChart,
+	CartesianGrid,
+	Cell,
+	ComposedChart,
+	Legend,
+	Line,
+	Pie,
+	PieChart as RPieChart,
+	ResponsiveContainer,
+	Sector,
+	Tooltip,
+	XAxis,
+	YAxis,
+	type PieSectorShapeProps,
+	type TooltipContentProps,
+} from "recharts";
+import { fmt, type Category, type Month } from "./data";
 
-export function DualLineChart({
-	months,
-	incColor = "var(--brand)",
-	spendColor = "var(--ink-2)",
-}: {
-	months: Month[];
-	incColor?: string;
-	spendColor?: string;
-}) {
-	const W = 600;
-	const H = 240;
-	const P = { l: 40, r: 16, t: 18, b: 32 };
-	const innerW = W - P.l - P.r;
-	const innerH = H - P.t - P.b;
+// Recharts paints series via SVG presentation attributes (fill/stroke), where
+// CSS var() does NOT resolve — so series colors are concrete oklch() literals
+// mirroring the design tokens in dashboard.css / design.css. Axis text, grid
+// lines and the legend are styled in CSS (see dashboard.css) so they stay
+// theme-aware. Keep these in sync with the CSS tokens.
+const COLOR = {
+	income: "oklch(0.65 0.20 211)", // --brand (blue)
+	spending: "oklch(0.66 0.18 35)", // --cat-3 (orange)
+	saved: "oklch(0.70 0.17 152)", // green — net positive
+	overspent: "oklch(0.62 0.18 25)", // --danger (red) — net negative
+} as const;
 
-	const all = months.flatMap((m) => [m.inc, m.spend]);
-	const max = Math.max(...all) * 1.1 || 1;
-	const min = 0;
+// Category token → concrete color, mirroring the --cat-* tokens.
+const CAT_COLOR: Record<string, string> = {
+	"cat-1": "oklch(0.62 0.18 211)",
+	"cat-2": "oklch(0.72 0.16 165)",
+	"cat-3": "oklch(0.66 0.18 35)",
+	"cat-4": "oklch(0.70 0.14 295)",
+	"cat-5": "oklch(0.65 0.18 22)",
+	"cat-6": "oklch(0.74 0.12 90)",
+};
 
-	const x = (i: number) =>
-		P.l + (months.length === 1 ? innerW / 2 : (i / (months.length - 1)) * innerW);
-	const y = (v: number) => P.t + innerH - ((v - min) / (max - min)) * innerH;
+const AXIS_TICK = { fontSize: 11, fontFamily: "var(--font-mono)", fill: "var(--ink-4)" };
 
-	const linePath = (key: "inc" | "spend") =>
-		months
-			.map((m, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(m[key]).toFixed(1)}`)
-			.join(" ");
+function yAxisTick(v: number): string {
+	const abs = Math.abs(v);
+	if (abs >= 1000) return `$${(v / 1000).toFixed(abs >= 10000 ? 0 : 1)}k`;
+	return `$${v}`;
+}
 
-	const areaPath = (key: "inc" | "spend") =>
-		`${linePath(key)} L${x(months.length - 1).toFixed(1)},${(P.t + innerH).toFixed(1)} L${x(0).toFixed(1)},${(P.t + innerH).toFixed(1)} Z`;
+function ChartEmpty({ label }: { label: string }) {
+	return <div className="chart-empty">{label}</div>;
+}
 
-	const ticks = 4;
-	const yTicks = Array.from({ length: ticks + 1 }, (_, i) => (max / ticks) * i);
+// ============================================================
+// Shared tooltip — one dark card listing each series row.
+// ============================================================
+type TipRow = { label: string; value: number; color: string; signed?: boolean };
 
-	const [hover, setHover] = useState<number | null>(null);
-	const svgRef = useRef<SVGSVGElement | null>(null);
-
-	const onMove = (e: MouseEvent<SVGSVGElement>) => {
-		if (!svgRef.current) return;
-		const r = svgRef.current.getBoundingClientRect();
-		const px = ((e.clientX - r.left) / r.width) * W;
-		const i = Math.round(((px - P.l) / innerW) * (months.length - 1));
-		if (i >= 0 && i < months.length) setHover(i);
-	};
-
+function TipCard({ title, rows }: { title: string; rows: TipRow[] }) {
 	return (
-		<div className="chart-wrap">
-			<svg
-				ref={svgRef}
-				viewBox={`0 0 ${W} ${H}`}
-				className="chart-svg"
-				onMouseMove={onMove}
-				onMouseLeave={() => setHover(null)}
-			>
-				<defs>
-					<linearGradient id="incFill" x1="0" x2="0" y1="0" y2="1">
-						<stop offset="0%" stopColor={incColor} stopOpacity="0.18" />
-						<stop offset="100%" stopColor={incColor} stopOpacity="0" />
-					</linearGradient>
-				</defs>
-
-				{yTicks.map((v, i) => (
-					<g key={i}>
-						<line
-							x1={P.l}
-							x2={W - P.r}
-							y1={y(v)}
-							y2={y(v)}
-							stroke="var(--line-soft)"
-							strokeWidth="1"
-						/>
-						<text
-							x={P.l - 8}
-							y={y(v) + 3.5}
-							textAnchor="end"
-							fontSize="10"
-							fill="var(--ink-4)"
-							fontFamily="Geist Mono, ui-monospace, monospace"
-						>
-							${(v / 1000).toFixed(v >= 1000 ? 1 : 0)}k
-						</text>
-					</g>
-				))}
-
-				<path d={areaPath("inc")} fill="url(#incFill)" />
-				<path
-					d={linePath("inc")}
-					fill="none"
-					stroke={incColor}
-					strokeWidth="2.2"
-					strokeLinejoin="round"
-					strokeLinecap="round"
-				/>
-				<path
-					d={linePath("spend")}
-					fill="none"
-					stroke={spendColor}
-					strokeWidth="2.2"
-					strokeLinejoin="round"
-					strokeLinecap="round"
-					strokeDasharray="5 4"
-				/>
-
-				{months.map((m, i) => (
-					<text
-						key={i}
-						x={x(i)}
-						y={H - 10}
-						textAnchor="middle"
-						fontSize="10.5"
-						fill="var(--ink-4)"
-						fontFamily="Geist Mono, ui-monospace, monospace"
-					>
-						{months.length > 8 && i % 2 ? "" : m.m}
-					</text>
-				))}
-
-				{hover !== null && (
-					<g>
-						<line
-							x1={x(hover)}
-							x2={x(hover)}
-							y1={P.t}
-							y2={P.t + innerH}
-							stroke="var(--ink-3)"
-							strokeWidth="1"
-							strokeDasharray="3 3"
-							opacity="0.5"
-						/>
-						<circle
-							cx={x(hover)}
-							cy={y(months[hover].inc)}
-							r="4"
-							fill="white"
-							stroke={incColor}
-							strokeWidth="2"
-						/>
-						<circle
-							cx={x(hover)}
-							cy={y(months[hover].spend)}
-							r="4"
-							fill="white"
-							stroke={spendColor}
-							strokeWidth="2"
-						/>
-						<g transform={`translate(${Math.min(W - 132, Math.max(P.l, x(hover) - 60))}, ${P.t - 8})`}>
-							<rect width="120" height="44" rx="8" fill="var(--ink)" />
-							<text
-								x="10"
-								y="16"
-								fontSize="10.5"
-								fill="rgba(255,255,255,0.7)"
-								fontFamily="Geist Mono, ui-monospace, monospace"
-							>
-								{months[hover].m}
-							</text>
-							<text
-								x="10"
-								y="30"
-								fontSize="11"
-								fill="white"
-								fontWeight="600"
-								fontFamily="Geist Mono, ui-monospace, monospace"
-							>
-								+${months[hover].inc.toLocaleString()}
-							</text>
-							<text
-								x="10"
-								y="40"
-								fontSize="10.5"
-								fill="rgba(255,255,255,0.85)"
-								fontFamily="Geist Mono, ui-monospace, monospace"
-							>
-								−${months[hover].spend.toLocaleString()}
-							</text>
-						</g>
-					</g>
-				)}
-			</svg>
-
-			<div className="chart-legend">
-				<span className="legend-item">
-					<span className="legend-dot" style={{ background: incColor }} /> Income
-				</span>
-				<span className="legend-item">
-					<span className="legend-dot legend-dash" style={{ background: spendColor }} /> Spending
-				</span>
-			</div>
+		<div className="rc-tip">
+			<div className="rc-tip-title">{title}</div>
+			{rows.map((r) => (
+				<div className="rc-tip-row" key={r.label}>
+					<span className="rc-tip-dot" style={{ background: r.color }} />
+					<span className="rc-tip-label">{r.label}</span>
+					<span className="rc-tip-val mono">
+						{fmt(r.value, { signed: r.signed, cents: true })}
+					</span>
+				</div>
+			))}
 		</div>
 	);
 }
 
+// ============================================================
+// Income vs Spending — line/area over time
+// ============================================================
+export function DualLineChart({ months }: { months: Month[] }) {
+	const data = useMemo(
+		() => months.map((m) => ({ month: m.m, income: m.inc, spending: m.spend })),
+		[months]
+	);
+
+	if (data.length === 0) return <ChartEmpty label="No activity in this period." />;
+
+	const tooltip = (p: TooltipContentProps) => {
+		if (!p.active || !p.payload?.length) return null;
+		const inc = Number(p.payload.find((d) => d.dataKey === "income")?.value ?? 0);
+		const spend = Number(p.payload.find((d) => d.dataKey === "spending")?.value ?? 0);
+		return (
+			<TipCard
+				title={String(p.label)}
+				rows={[
+					{ label: "Income", value: inc, color: COLOR.income },
+					{ label: "Spending", value: spend, color: COLOR.spending },
+					{ label: "Net", value: inc - spend, color: COLOR.saved, signed: true },
+				]}
+			/>
+		);
+	};
+
+	return (
+		<div className="chart-wrap">
+			<ResponsiveContainer width="100%" height={280}>
+				<ComposedChart data={data} margin={{ top: 16, right: 16, bottom: 8, left: 4 }}>
+					<defs>
+						<linearGradient id="incFill" x1="0" y1="0" x2="0" y2="1">
+							<stop offset="0%" stopColor={COLOR.income} stopOpacity={0.18} />
+							<stop offset="100%" stopColor={COLOR.income} stopOpacity={0} />
+						</linearGradient>
+					</defs>
+					<CartesianGrid vertical={false} strokeDasharray="0" className="rc-grid" />
+					<XAxis dataKey="month" tickLine={false} axisLine={false} tick={AXIS_TICK} dy={6} />
+					<YAxis
+						width={48}
+						tickLine={false}
+						axisLine={false}
+						tick={AXIS_TICK}
+						tickFormatter={yAxisTick}
+					/>
+					<Tooltip content={tooltip} cursor={{ stroke: "var(--ink-3)", strokeDasharray: "3 3" }} />
+					<Legend
+						verticalAlign="bottom"
+						height={28}
+						iconType="plainline"
+						wrapperStyle={{ fontSize: 12 }}
+					/>
+					<Area
+						name="Income"
+						type="monotone"
+						dataKey="income"
+						stroke={COLOR.income}
+						strokeWidth={2.2}
+						fill="url(#incFill)"
+						activeDot={{ r: 4 }}
+					/>
+					<Line
+						name="Spending"
+						type="monotone"
+						dataKey="spending"
+						stroke={COLOR.spending}
+						strokeWidth={2.2}
+						strokeDasharray="5 4"
+						dot={false}
+						activeDot={{ r: 4 }}
+					/>
+				</ComposedChart>
+			</ResponsiveContainer>
+		</div>
+	);
+}
+
+// A single donut sector, rendered via Recharts' per-sector `shape` render prop
+// so we can drive the emphasis from our own hover/click state (the built-in
+// activeShape/activeIndex props are deprecated in Recharts 3). The active slice
+// grows outward and gains a detached outer ring; the rest dim back so the
+// selection reads clearly. `shape` receives the fully-computed geometry
+// (center, radii, padded angles) so we never do any angle math ourselves.
+function PieSlice(props: PieSectorShapeProps & { activeIndex: number | null }) {
+	const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, index, activeIndex } =
+		props;
+	const isActive = index === activeIndex;
+	const isDim = activeIndex != null && !isActive;
+	const outer = Number(outerRadius ?? 0);
+	return (
+		<g className="pie-slice" opacity={isDim ? 0.4 : 1}>
+			<Sector
+				cx={cx}
+				cy={cy}
+				innerRadius={innerRadius}
+				outerRadius={isActive ? outer + 6 : outer}
+				startAngle={startAngle}
+				endAngle={endAngle}
+				fill={fill}
+				stroke="var(--surface)"
+				strokeWidth={2}
+			/>
+			{isActive ? (
+				<Sector
+					cx={cx}
+					cy={cy}
+					innerRadius={outer + 9}
+					outerRadius={outer + 11}
+					startAngle={startAngle}
+					endAngle={endAngle}
+					fill={fill}
+					opacity={0.45}
+				/>
+			) : null}
+		</g>
+	);
+}
+
+// ============================================================
+// Spending by category — donut for the current period
+// ============================================================
 export function PieChart({ categories }: { categories: Category[] }) {
-	const total = categories.reduce((a, b) => a + b.v, 0);
-	const R = 90;
-	const r = 56;
-	const CX = 110;
-	const CY = 110;
+	const data = useMemo(
+		() =>
+			categories.map((c) => ({
+				name: c.name,
+				value: c.v,
+				color: CAT_COLOR[c.c] ?? COLOR.income,
+			})),
+		[categories]
+	);
+	const total = useMemo(() => data.reduce((s, d) => s + d.value, 0), [data]);
 
-	const [hoverI, setHoverI] = useState<number | null>(null);
+	// Hover wins while the cursor is over a slice/legend row; otherwise the last
+	// clicked slice stays selected so its breakdown lingers in the center.
+	const [hovered, setHovered] = useState<number | null>(null);
+	const [selected, setSelected] = useState<number | null>(null);
+	const active = hovered ?? selected;
 
-	const slices = useMemo(() => {
-		let acc = 0;
-		return categories.map((c, i) => {
-			const start = acc / total;
-			acc += c.v;
-			const end = acc / total;
-			const a0 = start * Math.PI * 2 - Math.PI / 2;
-			const a1 = end * Math.PI * 2 - Math.PI / 2;
-			const large = end - start > 0.5 ? 1 : 0;
-			const x0 = CX + R * Math.cos(a0);
-			const y0 = CY + R * Math.sin(a0);
-			const x1 = CX + R * Math.cos(a1);
-			const y1 = CY + R * Math.sin(a1);
-			const xi0 = CX + r * Math.cos(a0);
-			const yi0 = CY + r * Math.sin(a0);
-			const xi1 = CX + r * Math.cos(a1);
-			const yi1 = CY + r * Math.sin(a1);
-			const d = [
-				`M${x0.toFixed(2)},${y0.toFixed(2)}`,
-				`A${R},${R} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`,
-				`L${xi1.toFixed(2)},${yi1.toFixed(2)}`,
-				`A${r},${r} 0 ${large} 0 ${xi0.toFixed(2)},${yi0.toFixed(2)}`,
-				"Z",
-			].join(" ");
-			return { ...c, d, pct: (end - start) * 100, i };
-		});
-	}, [categories, total]);
+	if (data.length === 0 || total === 0)
+		return <ChartEmpty label="No spending to break down yet." />;
 
-	const center = hoverI !== null ? slices[hoverI] : null;
+	const activeSlice = active != null ? data[active] : null;
+	const toggle = (i: number) => setSelected((s) => (s === i ? null : i));
 
 	return (
 		<div className="pie-wrap">
-			<svg viewBox="0 0 220 220" className="pie-svg" width="220" height="220">
-				{slices.map((s) => (
-					<path
-						key={s.i}
-						d={s.d}
-						className={`pie-slice cat-${s.c.replace("cat-", "")}`}
-						style={{
-							fill: `var(--${s.c})`,
-							opacity: hoverI === null || hoverI === s.i ? 1 : 0.35,
-							transform: hoverI === s.i ? "scale(1.025)" : "scale(1)",
-							transformOrigin: "110px 110px",
-							transition:
-								"opacity 160ms ease, transform 160ms cubic-bezier(0.22,0.8,0.2,1)",
-						}}
-						onMouseEnter={() => setHoverI(s.i)}
-						onMouseLeave={() => setHoverI(null)}
-					/>
-				))}
-				<text
-					x="110"
-					y="106"
-					textAnchor="middle"
-					fontSize="11"
-					fill="var(--ink-4)"
-					fontFamily="Geist Mono, ui-monospace, monospace"
-					letterSpacing="0.05em"
-				>
-					{center ? center.name.toUpperCase() : "TOTAL"}
-				</text>
-				<text
-					x="110"
-					y="124"
-					textAnchor="middle"
-					fontSize="18"
-					fill="var(--ink)"
-					fontWeight="600"
-					fontFamily="Geist Mono, ui-monospace, monospace"
-				>
-					{center ? "$" + center.v.toLocaleString() : "$" + total.toLocaleString()}
-				</text>
-				<text
-					x="110"
-					y="138"
-					textAnchor="middle"
-					fontSize="10"
-					fill="var(--ink-3)"
-					fontFamily="Geist Mono, ui-monospace, monospace"
-				>
-					{center ? center.pct.toFixed(1) + "%" : "this period"}
-				</text>
-			</svg>
+			<div className="pie-canvas">
+				<ResponsiveContainer width="100%" height={260}>
+					<RPieChart>
+						<Pie
+							data={data}
+							dataKey="value"
+							nameKey="name"
+							cx="50%"
+							cy="50%"
+							innerRadius={62}
+							outerRadius={94}
+							paddingAngle={1.5}
+							isAnimationActive={false}
+							shape={(p: PieSectorShapeProps) => <PieSlice {...p} activeIndex={active} />}
+							onMouseEnter={(_, i) => setHovered(i)}
+							onMouseLeave={() => setHovered(null)}
+							onClick={(_, i) => toggle(i)}
+						>
+							{data.map((d) => (
+								<Cell key={d.name} fill={d.color} />
+							))}
+						</Pie>
+					</RPieChart>
+				</ResponsiveContainer>
+
+				{/* Center readout — total by default, the active slice on hover/select. */}
+				<div className="pie-center" aria-hidden>
+					{activeSlice ? (
+						<>
+							<span className="pie-center-cap">{activeSlice.name}</span>
+							<span className="pie-center-v mono">
+								{fmt(activeSlice.value, { cents: true })}
+							</span>
+							<span className="pie-center-pct mono">
+								{((activeSlice.value / total) * 100).toFixed(1)}%
+							</span>
+						</>
+					) : (
+						<>
+							<span className="pie-center-cap">Total</span>
+							<span className="pie-center-v mono">{fmt(total, { cents: true })}</span>
+							<span className="pie-center-sub">
+								{data.length} {data.length === 1 ? "category" : "categories"}
+							</span>
+						</>
+					)}
+				</div>
+			</div>
 
 			<ul className="pie-legend">
-				{slices.map((s) => (
+				<li className="pie-legend-total">
+					<span className="pie-legend-name">Total spending</span>
+					<span className="pie-legend-v mono">{fmt(total, { cents: true })}</span>
+				</li>
+				{data.map((d, i) => (
 					<li
-						key={s.i}
-						className={hoverI !== null && hoverI !== s.i ? "dim" : ""}
-						onMouseEnter={() => setHoverI(s.i)}
-						onMouseLeave={() => setHoverI(null)}
+						key={d.name}
+						className={`${active === i ? "active" : ""} ${active != null && active !== i ? "dim" : ""}`}
+						onMouseEnter={() => setHovered(i)}
+						onMouseLeave={() => setHovered(null)}
+						onClick={() => toggle(i)}
 					>
-						<span className="legend-dot" style={{ background: `var(--${s.c})` }} />
-						<span className="pie-legend-name">{s.name}</span>
-						<span className="pie-legend-pct mono">{s.pct.toFixed(1)}%</span>
-						<span className="pie-legend-v mono">${s.v.toLocaleString()}</span>
+						<span className="legend-dot" style={{ background: d.color }} />
+						<span className="pie-legend-name">{d.name}</span>
+						<span className="pie-legend-pct mono">
+							{((d.value / total) * 100).toFixed(1)}%
+						</span>
+						<span className="pie-legend-v mono">{fmt(d.value, { cents: true })}</span>
 					</li>
 				))}
 			</ul>
@@ -305,102 +299,59 @@ export function PieChart({ categories }: { categories: Category[] }) {
 	);
 }
 
+// ============================================================
+// Made vs Spent per month — grouped bars (income beside spending)
+// ============================================================
 export function BarChart({ months }: { months: Month[] }) {
-	const W = 600;
-	const H = 240;
-	const P = { l: 40, r: 16, t: 18, b: 32 };
-	const innerW = W - P.l - P.r;
-	const innerH = H - P.t - P.b;
-	const nets = months.map((m) => m.inc - m.spend);
-	const max = Math.max(...nets.map(Math.abs)) * 1.15 || 1;
+	const data = useMemo(
+		() => months.map((m) => ({ month: m.m, income: m.inc, spending: m.spend })),
+		[months]
+	);
 
-	const bw = (innerW / months.length) * 0.62;
-	const xCenter = (i: number) => P.l + (innerW / months.length) * (i + 0.5);
-	const zeroY = P.t + innerH / 2;
-	const y = (v: number) => zeroY - (v / max) * (innerH / 2);
+	if (data.length === 0) return <ChartEmpty label="No activity in this period." />;
 
-	const [hover, setHover] = useState<number | null>(null);
+	const tooltip = (p: TooltipContentProps) => {
+		if (!p.active || !p.payload?.length) return null;
+		const inc = Number(p.payload.find((d) => d.dataKey === "income")?.value ?? 0);
+		const spend = Number(p.payload.find((d) => d.dataKey === "spending")?.value ?? 0);
+		return (
+			<TipCard
+				title={String(p.label)}
+				rows={[
+					{ label: "Made", value: inc, color: COLOR.income },
+					{ label: "Spent", value: spend, color: COLOR.spending },
+					{ label: "Net", value: inc - spend, color: COLOR.saved, signed: true },
+				]}
+			/>
+		);
+	};
 
 	return (
 		<div className="chart-wrap">
-			<svg viewBox={`0 0 ${W} ${H}`} className="chart-svg">
-				<line
-					x1={P.l}
-					x2={W - P.r}
-					y1={zeroY}
-					y2={zeroY}
-					stroke="var(--line)"
-					strokeWidth="1"
-				/>
-
-				{months.map((m, i) => {
-					const v = nets[i];
-					const yTop = v >= 0 ? y(v) : zeroY;
-					const h = Math.abs(y(v) - zeroY);
-					const isHover = hover === i;
-					return (
-						<g
-							key={i}
-							onMouseEnter={() => setHover(i)}
-							onMouseLeave={() => setHover(null)}
-							style={{ cursor: "pointer" }}
-						>
-							<rect
-								x={xCenter(i) - bw / 2}
-								y={yTop}
-								width={bw}
-								height={Math.max(2, h)}
-								rx="3"
-								fill={v >= 0 ? "var(--brand)" : "var(--danger, oklch(0.62 0.18 25))"}
-								opacity={hover === null || isHover ? 1 : 0.55}
-							/>
-							<text
-								x={xCenter(i)}
-								y={H - 10}
-								textAnchor="middle"
-								fontSize="10.5"
-								fill="var(--ink-4)"
-								fontFamily="Geist Mono, ui-monospace, monospace"
-							>
-								{months.length > 8 && i % 2 ? "" : m.m}
-							</text>
-							{isHover && (
-								<g
-									transform={`translate(${Math.min(W - 110, Math.max(P.l, xCenter(i) - 50))}, ${Math.max(2, yTop - 36)})`}
-								>
-									<rect width="100" height="32" rx="6" fill="var(--ink)" />
-									<text
-										x="10"
-										y="14"
-										fontSize="10.5"
-										fill="rgba(255,255,255,0.7)"
-										fontFamily="Geist Mono, ui-monospace, monospace"
-									>
-										{m.m} net
-									</text>
-									<text
-										x="10"
-										y="26"
-										fontSize="11"
-										fill="white"
-										fontWeight="600"
-										fontFamily="Geist Mono, ui-monospace, monospace"
-									>
-										{v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString()}
-									</text>
-								</g>
-							)}
-						</g>
-					);
-				})}
-			</svg>
+			<ResponsiveContainer width="100%" height={280}>
+				<RBarChart data={data} margin={{ top: 16, right: 16, bottom: 8, left: 4 }}>
+					<CartesianGrid vertical={false} className="rc-grid" />
+					<XAxis dataKey="month" tickLine={false} axisLine={false} tick={AXIS_TICK} dy={6} />
+					<YAxis
+						width={48}
+						tickLine={false}
+						axisLine={false}
+						tick={AXIS_TICK}
+						tickFormatter={yAxisTick}
+					/>
+					<Tooltip content={tooltip} cursor={{ fill: "var(--surface-2)" }} />
+					{/* Two series with no stackId render grouped side by side. */}
+					<Bar name="Made" dataKey="income" fill={COLOR.income} radius={[3, 3, 3, 3]} maxBarSize={28} />
+					<Bar name="Spent" dataKey="spending" fill={COLOR.spending} radius={[3, 3, 3, 3]} maxBarSize={28} />
+				</RBarChart>
+			</ResponsiveContainer>
 
 			<div className="chart-legend">
 				<span className="legend-item">
-					<span className="legend-dot" style={{ background: "var(--brand)" }} /> Saved (net positive)
+					<span className="legend-dot" style={{ background: COLOR.income }} /> Made
 				</span>
 				<span className="legend-item">
-					<span className="legend-dot" style={{ background: "oklch(0.62 0.18 25)" }} /> Overspent
+					<span className="legend-dot" style={{ background: COLOR.spending }} /> Spent
 				</span>
 			</div>
 		</div>

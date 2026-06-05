@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { buildTransactions, fmt, groupAccountsByType, RANGES, type AccountDisplay, type AccountTypeGroup, type RangeKey, type Slice, type Transaction, type View, type ViewKey } from "./data";
+import { buildTransactions, fmt, groupAccountsByType, RANGES, sliceCategories, type AccountDisplay, type AccountTypeGroup, type RangeKey, type Slice, type Transaction, type View, type ViewKey } from "./data";
 import { BarChart, DualLineChart, PieChart } from "./charts";
 import { ModalShell } from "./modals";
 import { AddAccountModal, ManualAccountForm, type EditingAccount } from "./AddAccountModal";
@@ -138,7 +138,14 @@ export function DashboardTab({
 	const [chart, setChart] = useState<ChartKind>("line");
 	const savingsRate = slice.inc > 0 ? (slice.savings / slice.inc) * 100 : 0;
 	const monthsLen = slice.months.length || 1;
-	const totalCategorySpend = v.categories.reduce((a, b) => a + b.v, 0) || 1;
+	// Spending-by-category rolled up to the selected timeframe, in lock-step with
+	// the line/bar charts (same months as the slice). Drives the pie and the
+	// category-based insights below.
+	const categories = useMemo(
+		() => sliceCategories(v.categoriesByMonth, slice.months),
+		[v.categoriesByMonth, slice.months]
+	);
+	const totalCategorySpend = categories.reduce((a, b) => a + b.v, 0) || 1;
 
 	return (
 		<div className="db-content">
@@ -175,7 +182,7 @@ export function DashboardTab({
 							{chart === "line" ? "Income vs spending over time." : null}
 							{chart === "pie" ? "Where your money went, by category." : null}
 							{chart === "bar"
-								? "Net cash flow each month — green saved, red overspent."
+								? "Income vs spending each month — made beside spent."
 								: null}
 						</p>
 					</div>
@@ -215,7 +222,7 @@ export function DashboardTab({
 									className={`seg-btn seg-btn-sm ${range === r ? "active" : ""}`}
 									onClick={() => setRange(r)}
 								>
-									{r}
+									{r === "ALL" ? "All" : r}
 								</button>
 							))}
 						</div>
@@ -224,7 +231,7 @@ export function DashboardTab({
 
 				<div className="chart-stage" key={chart + view + range}>
 					{chart === "line" ? <DualLineChart months={slice.months} /> : null}
-					{chart === "pie" ? <PieChart categories={v.categories} /> : null}
+					{chart === "pie" ? <PieChart categories={categories} /> : null}
 					{chart === "bar" ? <BarChart months={slice.months} /> : null}
 				</div>
 			</section>
@@ -264,8 +271,8 @@ export function DashboardTab({
 						/>
 						<Insight
 							tone="info"
-							title={`Top category: ${v.categories[0]?.name ?? "—"}`}
-							body={`${fmt(v.categories[0]?.v ?? 0)} this month, ${(((v.categories[0]?.v ?? 0) / totalCategorySpend) * 100).toFixed(0)}% of all spending.`}
+							title={`Top category: ${categories[0]?.name ?? "—"}`}
+							body={`${fmt(categories[0]?.v ?? 0)} in ${RANGES[range].label.toLowerCase()}, ${(((categories[0]?.v ?? 0) / totalCategorySpend) * 100).toFixed(0)}% of all spending.`}
 						/>
 						<Insight
 							tone={savingsRate >= 20 ? "pos" : "warn"}

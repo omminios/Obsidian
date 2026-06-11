@@ -85,12 +85,42 @@ export type DashboardSummary = {
 
 export type TxPageFilter = "all" | "income" | "spend";
 
+// Timeframe lower bound for the transaction list. "month" = current calendar
+// month-to-date (the default); "all" = no bound. Mirrors the server enum.
+export type TxRange = "month" | "3m" | "6m" | "1y" | "all";
+
+// Full-set KPI aggregates for the transaction list — summed over every matching
+// transaction (all pages), not just the rows on the current page. `sumOut` is a
+// positive magnitude. Counts mirror the same filtered set.
+export type TransactionPageSummary = {
+	total: number;
+	sumIn: number;
+	sumOut: number;
+	countIn: number;
+	countOut: number;
+};
+
+// One month's totals for the transaction list's section headers. Computed
+// server-side over the whole filtered set so each header shows the month's true
+// totals, not a sum of the current page. `monthKey` ("2026-06") is the stable key
+// the client groups rows by; `month` ("Jun 2026") is the display label.
+export type TxMonthlyBucket = {
+	month: string;
+	monthKey: string;
+	sumIn: number;
+	sumOut: number;
+	net: number;
+	count: number;
+};
+
 export type TransactionPageResult = {
 	transactions: DashboardSummary["group_transactions"];
 	total: number;
 	page: number;
 	pages: number;
 	showOwner: boolean;
+	summary: TransactionPageSummary;
+	monthly: TxMonthlyBucket[];
 };
 
 export type AccountTransactionPageResult = {
@@ -140,6 +170,35 @@ export function setSessionListeners(listeners: {
 }) {
 	onActivity = listeners.onActivity ?? null;
 	onSessionExpired = listeners.onSessionExpired ?? null;
+}
+
+// Payload pushed by the server when a household's Plaid sync finishes (both the
+// ~7-hour cron sync and an on-demand POST /plaid/sync). Mirrors publishToGroup
+// in node/src/services/realtime/eventBus.ts.
+export type SyncCompleteEvent = {
+	added: number;
+	modified: number;
+	removed: number;
+	at: string;
+};
+
+// Open an SSE stream to /api/v1/events and invoke `onSync` whenever this user's
+// household finishes a sync — the cue for the dashboard to refetch its own
+// (per-user) summary. EventSource sends the auth cookies automatically and
+// auto-reconnects on a dropped connection. Returns an unsubscribe function that
+// closes the stream (call it on unmount).
+export function subscribeToSync(
+	onSync: (data: SyncCompleteEvent) => void
+): () => void {
+	const es = new EventSource("/api/v1/events", { withCredentials: true });
+	es.addEventListener("sync:complete", (e) => {
+		try {
+			onSync(JSON.parse((e as MessageEvent).data) as SyncCompleteEvent);
+		} catch {
+			// Malformed payload — ignore rather than crash the handler.
+		}
+	});
+	return () => es.close();
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -239,6 +298,15 @@ export const api = {
 		}>("/api/v1/users/", {
 			method: "PATCH",
 			body: JSON.stringify({ first_name, last_name }),
+		}),
+
+	// Permanently delete the caller's own account and all associated data. A
+	// household creator with other members is rejected server-side until they
+	// remove everyone first.
+	deleteUser: (id: number) =>
+		request<{ message: string }>("/api/v1/users/", {
+			method: "DELETE",
+			body: JSON.stringify({ id }),
 		}),
 
 	// Rename the caller's current group/household. Creator-only (enforced server-side).
@@ -407,9 +475,24 @@ export const api = {
 	getDashboardSummary: () =>
 		request<DashboardSummary>("/api/v1/dashboard/summary"),
 
-	getTransactionPage: (view: string, page: number, filter: TxPageFilter) =>
+	getTransactionPage: (
+		view: string,
+		page: number,
+		filter: TxPageFilter,
+		category?: string,
+		range: TxRange = "month",
+		search?: string
+	) =>
 		request<TransactionPageResult>(
-			`/api/v1/dashboard/transactions?view=${encodeURIComponent(view)}&page=${page}&filter=${filter}`
+			`/api/v1/dashboard/transactions?view=${encodeURIComponent(view)}&page=${page}&filter=${filter}&range=${range}` +
+				(category ? `&category=${encodeURIComponent(category)}` : "") +
+				(search ? `&search=${encodeURIComponent(search)}` : "")
+		),
+
+	// Distinct categories available for the given view, for the filter dropdown.
+	getTransactionCategories: (view: string) =>
+		request<{ categories: string[] }>(
+			`/api/v1/dashboard/transactions/categories?view=${encodeURIComponent(view)}`
 		),
 
 	getAccountTransactionPage: (accountId: number, page: number, filter: TxPageFilter) =>

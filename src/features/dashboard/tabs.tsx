@@ -6,7 +6,7 @@ import { AddAccountModal, ManualAccountForm, type EditingAccount } from "./AddAc
 import { AddTransactionModal, type EditingTransaction } from "./AddTransactionModal";
 import type { ManualAccountType } from "./accountTaxonomy";
 import { IconBank, IconCard, IconLoan, IconInvest } from "../../components/icons";
-import { api, ApiError, type DashboardSummary, type TxPageFilter } from "../../lib/api";
+import { api, ApiError, type DashboardSummary, type TxPageFilter, type TransactionPageSummary, type TxRange, type TxMonthlyBucket } from "../../lib/api";
 
 type ChartKind = "line" | "pie" | "bar";
 
@@ -187,7 +187,7 @@ export function DashboardTab({
 							{chart === "line" ? "Net worth over time." : null}
 							{chart === "pie" ? "Where your money went, by category." : null}
 							{chart === "bar"
-								? "Income vs spending each month — made beside spent."
+								? "Income vs spending each month — made, spent, and net."
 								: null}
 						</p>
 					</div>
@@ -341,6 +341,26 @@ function TxRow({
 	return <li className="tx-li">{content}</li>;
 }
 
+// Empty KPI aggregates — the initial state and the fallback when a response omits
+// `summary` (e.g. an older backend during a deploy skew).
+const ZERO_SUMMARY: TransactionPageSummary = {
+	total: 0,
+	sumIn: 0,
+	sumOut: 0,
+	countIn: 0,
+	countOut: 0,
+};
+
+// Timeframe options for the transaction list, narrowest first. Labels stay short
+// so the segmented control fits beside the income/spend filter.
+const TX_TIMEFRAMES: { key: TxRange; label: string }[] = [
+	{ key: "month", label: "This month" },
+	{ key: "3m", label: "3M" },
+	{ key: "6m", label: "6M" },
+	{ key: "1y", label: "1Y" },
+	{ key: "all", label: "All" },
+];
+
 export function TabTransactions({
 	view,
 	accounts,
@@ -351,11 +371,26 @@ export function TabTransactions({
 	accounts: DashboardSummary["my_accounts"];
 	onTransactionAdded: () => void;
 }) {
-	const [filter, setFilter] = useState<TxPageFilter>("all");
+	// "" means all categories; any other value narrows to that exact category.
+	const [category, setCategory] = useState("");
+	const [categories, setCategories] = useState<string[]>([]);
+	// Free-text search over merchant/description. `searchInput` is bound to the box
+	// (immediate); `search` is the debounced value that actually drives the fetch.
+	const [searchInput, setSearchInput] = useState("");
+	const [search, setSearch] = useState("");
+	// Timeframe lower bound — defaults to the current month so the list opens
+	// focused instead of as an all-time stream.
+	const [range, setRange] = useState<TxRange>("month");
 	const [page, setPage] = useState(1);
 	const [txs, setTxs] = useState<Transaction[]>([]);
 	const [total, setTotal] = useState(0);
 	const [pages, setPages] = useState(1);
+	// Per-month totals for the section headers (true month totals over the whole
+	// filtered set, server-computed — never a sum of the current page).
+	const [monthly, setMonthly] = useState<TxMonthlyBucket[]>([]);
+	// Full-set KPI aggregates (every matching transaction, all pages) — the
+	// summary cards must not be derived from the current page alone.
+	const [summary, setSummary] = useState<TransactionPageSummary>(ZERO_SUMMARY);
 	const [loading, setLoading] = useState(true);
 	const [fetchError, setFetchError] = useState<string | null>(null);
 	const [addingTx, setAddingTx] = useState(false);
@@ -385,17 +420,30 @@ export function TabTransactions({
 		const isViewChange = prevViewRef.current !== view;
 		prevViewRef.current = view;
 		const effectivePage = isViewChange ? 1 : page;
-		if (isViewChange) setPage(1);
+		if (isViewChange) {
+			setPage(1);
+			// A category/search from the previous view may not apply to the new one;
+			// reset them so the controls and fetch stay consistent.
+			setCategory("");
+			setSearchInput("");
+			setSearch("");
+		}
+		const effectiveCategory = isViewChange ? "" : category;
+		const effectiveSearch = isViewChange ? "" : search;
 
 		setLoading(true);
 		setFetchError(null);
 		api
-			.getTransactionPage(view, effectivePage, filter)
+			.getTransactionPage(view, effectivePage, "all", effectiveCategory || undefined, range, effectiveSearch || undefined)
 			.then((data) => {
 				if (cancelled) return;
 				setTxs(buildTransactions(data.transactions, data.showOwner));
 				setTotal(data.total);
 				setPages(data.pages);
+				// Default if absent so a response shape from an older backend (during a
+				// deploy skew) degrades gracefully instead of crashing the page.
+				setSummary(data.summary ?? ZERO_SUMMARY);
+				setMonthly(data.monthly ?? []);
 			})
 			.catch((err) => {
 				if (cancelled) return;
@@ -405,40 +453,99 @@ export function TabTransactions({
 			.finally(() => { if (!cancelled) setLoading(false); });
 
 		return () => { cancelled = true; };
-	}, [view, page, filter, reloadKey]);
+	}, [view, page, category, range, search, reloadKey]);
 
-	const handleFilter = (f: TxPageFilter) => {
-		setFilter(f);
+	// Debounce the search box so we fire one request after typing settles, not one
+	// per keystroke. Committing a new term resets to the first page.
+	useEffect(() => {
+		const id = setTimeout(() => {
+			const v = searchInput.trim();
+			if (v !== search) {
+				setSearch(v);
+				setPage(1);
+			}
+		}, 300);
+		return () => clearTimeout(id);
+	}, [searchInput, search]);
+
+	// Load the distinct category list whenever the view changes — it scopes the
+	// dropdown options to categories that actually exist for the active view.
+	useEffect(() => {
+		let cancelled = false;
+		api
+			.getTransactionCategories(view)
+			.then((data) => {
+				if (!cancelled) setCategories(data.categories);
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				console.error("[TabTransactions] category fetch failed", err);
+				setCategories([]);
+			});
+		return () => { cancelled = true; };
+	}, [view]);
+
+	const handleCategory = (c: string) => {
+		setCategory(c);
 		setPage(1);
 	};
 
-	const totalIn = useMemo(() => txs.filter((t) => t.positive).reduce((s, t) => s + t.amt, 0), [txs]);
-	const totalOut = useMemo(() => txs.filter((t) => !t.positive).reduce((s, t) => s + Math.abs(t.amt), 0), [txs]);
+	const handleRange = (r: TxRange) => {
+		setRange(r);
+		setPage(1);
+	};
+
+	// Group the current page's rows into contiguous month sections (rows arrive
+	// newest-first, so a month's rows are already adjacent). Each section's header
+	// total is looked up from the server's per-month breakdown by monthKey, so it
+	// reflects the month's true totals regardless of which rows are on this page.
+	const monthlyByKey = useMemo(() => {
+		const m = new Map<string, TxMonthlyBucket>();
+		for (const b of monthly ?? []) m.set(b.monthKey, b);
+		return m;
+	}, [monthly]);
+
+	const sections = useMemo(() => {
+		const out: { key: string; rows: Transaction[] }[] = [];
+		for (const t of txs) {
+			const key = t.dateISO.slice(0, 7); // YYYY-MM
+			const last = out[out.length - 1];
+			if (last && last.key === key) last.rows.push(t);
+			else out.push({ key, rows: [t] });
+		}
+		return out;
+	}, [txs]);
 
 	return (
 		<div className="db-content" key={view}>
 			<div className="kpi-strip">
 				<KPI
 					label="Money in"
-					value={fmt(totalIn, { cents: true })}
-					sub={`${txs.filter((t) => t.positive).length} on this page`}
+					value={fmt(summary.sumIn, { cents: true })}
+					sub={`${summary.countIn.toLocaleString()} transactions`}
 					accent="pos"
 				/>
 				<KPI
 					label="Money out"
-					value={fmt(totalOut, { cents: true })}
-					sub={`${txs.filter((t) => !t.positive).length} on this page`}
+					value={fmt(summary.sumOut, { cents: true })}
+					sub={`${summary.countOut.toLocaleString()} transactions`}
 					accent="neg"
 				/>
 				<KPI
 					label="Net"
-					value={fmt(totalIn - totalOut, { signed: true, cents: true })}
-					sub="This page"
+					value={fmt(summary.sumIn - summary.sumOut, { signed: true, cents: true })}
+					sub="All transactions"
 				/>
 				<KPI
 					label="Total"
 					value={total.toLocaleString()}
-					sub={filter === "all" ? "transactions" : `${filter} transactions`}
+					sub={
+						search
+							? "matching transactions"
+							: category
+							? `${category} transactions`
+							: "transactions"
+					}
 				/>
 			</div>
 
@@ -447,30 +554,44 @@ export function TabTransactions({
 					<div>
 						<h2 className="panel-h">All transactions</h2>
 						<p className="panel-sub">
-							Page {page} of {pages} · {total.toLocaleString()} total
+							{TX_TIMEFRAMES.find((tf) => tf.key === range)?.label} · {total.toLocaleString()} total · page {page} of {pages}
 						</p>
 					</div>
 					<div className="panel-controls">
-						<div className="seg">
-							<button
-								className={`seg-btn ${filter === "all" ? "active" : ""}`}
-								onClick={() => handleFilter("all")}
-							>
-								All
-							</button>
-							<button
-								className={`seg-btn ${filter === "income" ? "active" : ""}`}
-								onClick={() => handleFilter("income")}
-							>
-								Income
-							</button>
-							<button
-								className={`seg-btn ${filter === "spend" ? "active" : ""}`}
-								onClick={() => handleFilter("spend")}
-							>
-								Spending
-							</button>
+						<input
+							className="tx-search"
+							type="search"
+							placeholder="Search transactions…"
+							value={searchInput}
+							onChange={(e) => setSearchInput(e.target.value)}
+							aria-label="Search transactions"
+						/>
+						<div className="seg seg-range" role="tablist" aria-label="Timeframe">
+							{TX_TIMEFRAMES.map((tf) => (
+								<button
+									key={tf.key}
+									role="tab"
+									aria-selected={range === tf.key}
+									className={`seg-btn seg-btn-sm ${range === tf.key ? "active" : ""}`}
+									onClick={() => handleRange(tf.key)}
+								>
+									{tf.label}
+								</button>
+							))}
 						</div>
+						<select
+							className="tx-cat-select"
+							value={category}
+							onChange={(e) => handleCategory(e.target.value)}
+							aria-label="Filter by category"
+						>
+							<option value="">All categories</option>
+							{categories.map((c) => (
+								<option key={c} value={c}>
+									{c}
+								</option>
+							))}
+						</select>
 						<button
 							className="btn btn-sm btn-brand"
 							onClick={() => setAddingTx(true)}
@@ -486,15 +607,34 @@ export function TabTransactions({
 					<div className="tx-loading" style={{ color: "oklch(0.55 0.18 25)" }}>
 						Failed to load: {fetchError}
 					</div>
-				) : (
+				) : txs.length === 0 ? (
 					<ul className="tx-list">
-						{txs.map((t, i) => (
-							<TxRow key={i} t={t} onEdit={setEditingTx} />
-						))}
-						{txs.length === 0 ? (
-							<li className="tx-empty">No transactions found.</li>
-						) : null}
+						<li className="tx-empty">No transactions found.</li>
 					</ul>
+				) : (
+					sections.map((s) => {
+						const bucket = monthlyByKey.get(s.key);
+						return (
+							<div className="tx-section" key={s.key}>
+								<div className="tx-month-head">
+									<span className="tx-month-label">{bucket?.month ?? s.key}</span>
+									{bucket ? (
+										<span className="tx-month-net">
+											<span className="tx-month-spent mono">
+												{fmt(bucket.sumOut, { cents: true })}
+											</span>
+											{" spent"}
+										</span>
+									) : null}
+								</div>
+								<ul className="tx-list">
+									{s.rows.map((t, i) => (
+										<TxRow key={i} t={t} onEdit={setEditingTx} />
+									))}
+								</ul>
+							</div>
+						);
+					})
 				)}
 
 				{pages > 1 ? (

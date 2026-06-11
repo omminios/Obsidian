@@ -282,7 +282,7 @@ export function PieChart({ categories }: { categories: Category[] }) {
 // ============================================================
 export function BarChart({ months }: { months: Month[] }) {
 	const data = useMemo(
-		() => months.map((m) => ({ month: m.m, income: m.inc, spending: m.spend })),
+		() => months.map((m) => ({ month: m.m, income: m.inc, spending: m.spend, net: m.inc - m.spend })),
 		[months]
 	);
 
@@ -307,7 +307,12 @@ export function BarChart({ months }: { months: Month[] }) {
 	return (
 		<div className="chart-wrap">
 			<ResponsiveContainer width="100%" height={280}>
-				<RBarChart data={data} margin={{ top: 16, right: 16, bottom: 8, left: 4 }}>
+				<RBarChart
+					data={data}
+					margin={{ top: 16, right: 16, bottom: 8, left: 4 }}
+					barGap={2}
+					barCategoryGap="35%"
+				>
 					<CartesianGrid vertical={false} className="rc-grid" />
 					<XAxis dataKey="month" tickLine={false} axisLine={false} tick={AXIS_TICK} dy={6} />
 					<YAxis
@@ -318,9 +323,16 @@ export function BarChart({ months }: { months: Month[] }) {
 						tickFormatter={yAxisTick}
 					/>
 					<Tooltip content={tooltip} cursor={{ fill: "var(--surface-2)" }} />
-					{/* Two series with no stackId render grouped side by side. */}
-					<Bar name="Made" dataKey="income" fill={COLOR.income} radius={[3, 3, 3, 3]} maxBarSize={28} />
-					<Bar name="Spent" dataKey="spending" fill={COLOR.spending} radius={[3, 3, 3, 3]} maxBarSize={28} />
+					{/* Three series with no stackId render grouped side by side. barGap
+					    keeps the trio tight within a month; barCategoryGap spaces the
+					    months. Net is colored per-bar: green positive, red overspent. */}
+					<Bar name="Made" dataKey="income" fill={COLOR.income} radius={[3, 3, 3, 3]} maxBarSize={18} />
+					<Bar name="Spent" dataKey="spending" fill={COLOR.spending} radius={[3, 3, 3, 3]} maxBarSize={18} />
+					<Bar name="Net" dataKey="net" radius={[3, 3, 3, 3]} maxBarSize={18}>
+						{data.map((d) => (
+							<Cell key={d.month} fill={d.net >= 0 ? COLOR.saved : COLOR.overspent} />
+						))}
+					</Bar>
 				</RBarChart>
 			</ResponsiveContainer>
 
@@ -330,6 +342,9 @@ export function BarChart({ months }: { months: Month[] }) {
 				</span>
 				<span className="legend-item">
 					<span className="legend-dot" style={{ background: COLOR.spending }} /> Spent
+				</span>
+				<span className="legend-item">
+					<span className="legend-dot" style={{ background: COLOR.saved }} /> Net
 				</span>
 			</div>
 		</div>

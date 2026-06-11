@@ -12,6 +12,7 @@ import invitationRoutes from "./invitationRoutes.js";
 import plaidRoutes from "./plaidRoutes.js";
 import sessionRoute from "./sessionRoute.js";
 import dashboardRoutes from "./dashboardRoutes.js";
+import eventsRoutes from "./eventsRoutes.js";
 
 const router = Router();
 
@@ -30,6 +31,7 @@ router.use("/accounts", accountRoutes);
 router.use("/invitations", invitationRoutes);
 router.use("/plaid", plaidRoutes);
 router.use("/dashboard", dashboardRoutes);
+router.use("/events", eventsRoutes);
 
 // Admin routes
 router.use("/admin", adminRoutes);

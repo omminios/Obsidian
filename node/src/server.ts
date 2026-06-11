@@ -1,6 +1,7 @@
 import app from "./app.js";
 import { pool } from "./config/database.js";
 import { startScheduledSync } from "./services/plaid/scheduledSyncService.js";
+import { closeAllClients } from "./services/realtime/eventBus.js";
 
 const PORT = process.env.PORT || 3000;
 
@@ -42,6 +43,9 @@ async function startServer() {
 		// ============================================
 		const gracefulShutdown = async (signal: string) => {
 			console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+			// Close held-open SSE streams so they don't keep the server alive.
+			closeAllClients();
 
 			server.close(async () => {
 				console.log("✅ HTTP server closed");

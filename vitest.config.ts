@@ -81,6 +81,15 @@ export default defineConfig({
 			},
 			{
 				test: {
+					name: "userService",
+					testTimeout: 60000,
+					include: [
+						"node/src/tests/service/userService.test.ts",
+					],
+				},
+			},
+			{
+				test: {
 					name: "refreshService",
 					testTimeout: 60000,
 					include: [
@@ -94,6 +103,15 @@ export default defineConfig({
 					testTimeout: 60000,
 					include: [
 						"node/src/tests/repository/balanceSnapshotRepository.test.ts",
+					],
+				},
+			},
+			{
+				test: {
+					name: "dashboard",
+					testTimeout: 60000,
+					include: [
+						"node/src/tests/repository/dashboardRepository.test.ts",
 					],
 				},
 			},

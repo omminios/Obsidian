@@ -250,6 +250,7 @@ export function SettingsModal({
 	onChangePassword,
 	onRenameGroup,
 	onUpdateProfile,
+	onDeleteAccount,
 	user,
 	groupName,
 	groupViews,
@@ -259,6 +260,7 @@ export function SettingsModal({
 	onChangePassword: () => void;
 	onRenameGroup: (name: string) => Promise<void>;
 	onUpdateProfile: (firstName: string, lastName: string) => Promise<void>;
+	onDeleteAccount: () => Promise<void>;
 	user: { first_name: string; last_name: string; email: string; username: string };
 	groupName: string;
 	groupViews: GroupView[];
@@ -276,6 +278,16 @@ export function SettingsModal({
 	const [saving, setSaving] = useState(false);
 	const [nameErr, setNameErr] = useState("");
 	const [groupErr, setGroupErr] = useState("");
+
+	// A creator with other active members can't delete their account — they'd
+	// strand the household. The member rows are the non-"group"/non-"me" views.
+	const hasOtherMembers = groupViews.some(
+		(g) => g.k !== "group" && g.k !== "me"
+	);
+	const blockedAsOwner = isCreator && hasOtherMembers;
+	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [deleting, setDeleting] = useState(false);
+	const [deleteErr, setDeleteErr] = useState("");
 
 	// "Sign out of all sessions" — reuses the logout flow, which revokes every
 	// one of the user's refresh tokens server-side (revokeAllUserRefreshTokens)
@@ -491,13 +503,6 @@ export function SettingsModal({
 								</div>
 								<IconArrow size={14} />
 							</button>
-							<button className="db-link-row">
-								<div>
-									<div className="db-link-row-t">Two-factor authentication</div>
-									<div className="db-link-row-d">Add an extra layer of security.</div>
-								</div>
-								<span className="db-pill">Off</span>
-							</button>
 							<button
 								className="db-link-row"
 								onClick={() => setConfirmRevoke((v) => !v)}
@@ -537,6 +542,84 @@ export function SettingsModal({
 										</button>
 									</div>
 								</div>
+							) : null}
+
+							<button
+								className="db-link-row db-link-row-danger"
+								onClick={() => {
+									setDeleteErr("");
+									setConfirmDelete((v) => !v);
+								}}
+							>
+								<div>
+									<div className="db-link-row-t">Delete account</div>
+									<div className="db-link-row-d">
+										Permanently erase your account and all data.
+									</div>
+								</div>
+								<IconArrow size={14} />
+							</button>
+							{confirmDelete ? (
+								blockedAsOwner ? (
+									<div className="db-warn">
+										<strong>Remove your household members first.</strong>{" "}
+										You're the creator of a shared household. Remove every
+										other member (in the Household tab) before you can delete
+										your account.
+										<div style={{ marginTop: 12 }}>
+											<button
+												className="btn btn-ghost"
+												onClick={() => setConfirmDelete(false)}
+											>
+												Close
+											</button>
+										</div>
+									</div>
+								) : (
+									<div className="db-warn">
+										<strong>Delete your account?</strong> This is permanent
+										and irreversible. Every account, transaction, linked
+										bank, and household you own will be erased. This cannot
+										be undone.
+										{deleteErr ? (
+											<div
+												className="field-error"
+												style={{ marginTop: 8 }}
+											>
+												{deleteErr}
+											</div>
+										) : null}
+										<div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+											<button
+												className="btn btn-ghost"
+												onClick={() => setConfirmDelete(false)}
+												disabled={deleting}
+											>
+												Cancel
+											</button>
+											<button
+												className="btn btn-danger-solid"
+												onClick={async () => {
+													setDeleting(true);
+													setDeleteErr("");
+													try {
+														await onDeleteAccount();
+													} catch (e) {
+														setDeleteErr(
+															e instanceof ApiError
+																? e.message
+																: "Could not delete your account. Please try again."
+														);
+														setDeleting(false);
+													}
+												}}
+												disabled={deleting}
+											>
+												{deleting ? "Deleting…" : "Delete my account"}
+											</button>
+										</div>
+									</div>
+								)
 							) : null}
 						</>
 					) : null}

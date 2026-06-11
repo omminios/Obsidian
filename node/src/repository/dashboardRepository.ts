@@ -96,6 +96,134 @@ function amountClause(filter: TxFilter): string {
 	return "";
 }
 
+// Appends a category equality condition to `params` and returns the SQL fragment.
+// Matches COALESCE(t.category, 'Other') so the literal value "Other" selects
+// uncategorized rows — consistent with how categories are surfaced to the client.
+// Returns "" (and leaves params untouched) when no category is requested.
+function categoryClause(category: string | undefined, params: unknown[]): string {
+	if (!category) return "";
+	params.push(category);
+	return ` AND COALESCE(t.category, 'Other') = $${params.length}`;
+}
+
+// Case-insensitive text match over the human-readable fields shown as each row's
+// name (merchant, then description). Both ILIKE conditions reuse the single pushed
+// param. Returns "" (params untouched) when no search term is given.
+function searchClause(search: string | undefined, params: unknown[]): string {
+	if (!search) return "";
+	params.push(`%${search}%`);
+	return ` AND (t.merchant_name ILIKE $${params.length} OR t.description ILIKE $${params.length})`;
+}
+
+export type TxRange = "month" | "3m" | "6m" | "1y" | "all";
+
+// Lower-bounds the result set by transaction_date for the selected timeframe so
+// the transaction list isn't an overwhelming all-time stream by default. `range`
+// is enum-validated upstream, so interpolating the interval literal here is safe
+// (no user input reaches the SQL). "month" is the current calendar month-to-date;
+// "all" applies no bound.
+function rangeClause(range: TxRange): string {
+	switch (range) {
+		case "month":
+			return " AND t.transaction_date >= date_trunc('month', CURRENT_DATE)";
+		case "3m":
+			return " AND t.transaction_date >= (CURRENT_DATE - INTERVAL '3 months')";
+		case "6m":
+			return " AND t.transaction_date >= (CURRENT_DATE - INTERVAL '6 months')";
+		case "1y":
+			return " AND t.transaction_date >= (CURRENT_DATE - INTERVAL '1 year')";
+		case "all":
+		default:
+			return "";
+	}
+}
+
+// SELECT list for the transaction-list summary KPIs. Computed over the entire
+// filtered set (all pages), so "Money in / out / Net" reflect every matching
+// transaction rather than just the rows on the current page. `sum_out` is
+// returned as a positive magnitude (negated) so the client renders it directly,
+// and the FILTER clauses respect whatever amount/category WHERE conditions the
+// caller appended. Must be selected against the same FROM/WHERE as the page query.
+const TX_AGGREGATE_SELECT = `
+	COUNT(*) AS total,
+	COALESCE(SUM(t.amount) FILTER (WHERE t.amount > 0), 0)::float AS sum_in,
+	COALESCE(-SUM(t.amount) FILTER (WHERE t.amount < 0), 0)::float AS sum_out,
+	COUNT(*) FILTER (WHERE t.amount > 0) AS count_in,
+	COUNT(*) FILTER (WHERE t.amount < 0) AS count_out`;
+
+// SELECT list + GROUP BY for the per-month breakdown that drives the list's month
+// section headers. Each header must show its month's true totals (every matching
+// row), not a sum of whatever rows happen to land on the current page — so this is
+// computed server-side over the same filtered set as the page query. `month` is
+// the display label ("Jun 2026") and `month_key` ("2026-06") is the stable key the
+// client groups page rows by. Newest month first to match the DESC row ordering.
+const TX_MONTHLY_SELECT = `
+	TO_CHAR(date_trunc('month', t.transaction_date), 'Mon YYYY') AS month,
+	TO_CHAR(date_trunc('month', t.transaction_date), 'YYYY-MM') AS month_key,
+	COALESCE(SUM(t.amount) FILTER (WHERE t.amount > 0), 0)::float AS sum_in,
+	COALESCE(-SUM(t.amount) FILTER (WHERE t.amount < 0), 0)::float AS sum_out,
+	COUNT(*)::int AS count`;
+
+const TX_MONTHLY_GROUP = `
+	GROUP BY date_trunc('month', t.transaction_date)
+	ORDER BY date_trunc('month', t.transaction_date) DESC`;
+
+type TxAggregate = {
+	total: number;
+	sumIn: number;
+	sumOut: number;
+	countIn: number;
+	countOut: number;
+};
+
+// One month's totals for the section headers. `net` = sumIn − sumOut (sumOut is a
+// positive magnitude, mirroring the KPI aggregates).
+export type TxMonthlyBucket = {
+	month: string;
+	monthKey: string;
+	sumIn: number;
+	sumOut: number;
+	net: number;
+	count: number;
+};
+
+// Shape returned by the paged transaction-list queries: one page of rows, the
+// full-set summary aggregates for the KPI strip, and the per-month breakdown for
+// the section headers.
+export type PagedTransactions = TxAggregate & {
+	transactions: DashboardGroupTransaction[];
+	monthly: TxMonthlyBucket[];
+};
+
+// Coerces the aggregate row (pg returns COUNT as a string, SUM as float) into the
+// numeric summary fields shared by every paged transaction query.
+function parseTxAggregate(row: Record<string, unknown> | undefined): TxAggregate {
+	return {
+		total: Number(row?.total ?? 0),
+		sumIn: Number(row?.sum_in ?? 0),
+		sumOut: Number(row?.sum_out ?? 0),
+		countIn: Number(row?.count_in ?? 0),
+		countOut: Number(row?.count_out ?? 0),
+	};
+}
+
+// Coerces the per-month breakdown rows into TxMonthlyBucket[] (pg serializes COUNT
+// as a string), computing each month's net from its in/out sums.
+function parseMonthlyBuckets(rows: Record<string, unknown>[]): TxMonthlyBucket[] {
+	return rows.map((r) => {
+		const sumIn = Number(r.sum_in ?? 0);
+		const sumOut = Number(r.sum_out ?? 0);
+		return {
+			month: String(r.month ?? ""),
+			monthKey: String(r.month_key ?? ""),
+			sumIn,
+			sumOut,
+			net: sumIn - sumOut,
+			count: Number(r.count ?? 0),
+		};
+	});
+}
+
 // Returns a paginated page of the requesting user's own transactions.
 // Joins account info for display (name, institution, last four digits).
 // Includes owner identity fields so the response shape matches DashboardGroupTransaction
@@ -105,12 +233,22 @@ export const getMyTransactionsPaged = async (
 	userId: number,
 	page: number,
 	limit: number,
-	filter: TxFilter
-): Promise<{ transactions: DashboardGroupTransaction[]; total: number }> => {
+	filter: TxFilter,
+	category?: string,
+	range: TxRange = "all",
+	search?: string
+): Promise<PagedTransactions> => {
 	const offset = (page - 1) * limit;
-	const cond = amountClause(filter);
+	// One WHERE for all three queries: category appends a param to baseParams,
+	// range/amount are literal fragments. The page query reuses baseParams plus
+	// limit/offset; the aggregate and monthly queries use baseParams as-is.
+	const baseParams: unknown[] = [userId];
+	const cond = amountClause(filter) + categoryClause(category, baseParams) + rangeClause(range) + searchClause(search, baseParams);
+	const limitIdx = baseParams.length + 1;
+	const offsetIdx = baseParams.length + 2;
+	const dataParams = [...baseParams, limit, offset];
 	try {
-		const [dataRes, countRes] = await Promise.all([
+		const [dataRes, aggRes, monthlyRes] = await Promise.all([
 			pool.query(
 				`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
 				        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four,
@@ -121,17 +259,22 @@ export const getMyTransactionsPaged = async (
 				 JOIN users u ON u.id = t.user_id
 				 WHERE t.user_id = $1${cond}
 				 ORDER BY t.transaction_date DESC, t.id DESC
-				 LIMIT $2 OFFSET $3`,
-				[userId, limit, offset]
+				 LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+				dataParams
 			),
 			pool.query(
-				`SELECT COUNT(*) AS total FROM transactions t WHERE t.user_id = $1${cond}`,
-				[userId]
+				`SELECT ${TX_AGGREGATE_SELECT} FROM transactions t WHERE t.user_id = $1${cond}`,
+				baseParams
+			),
+			pool.query(
+				`SELECT ${TX_MONTHLY_SELECT} FROM transactions t WHERE t.user_id = $1${cond}${TX_MONTHLY_GROUP}`,
+				baseParams
 			),
 		]);
 		return {
 			transactions: dataRes.rows as DashboardGroupTransaction[],
-			total: Number(countRes.rows[0]?.total ?? 0),
+			...parseTxAggregate(aggRes.rows[0]),
+			monthly: parseMonthlyBuckets(monthlyRes.rows),
 		};
 	} catch (e) {
 		console.error("[getMyTransactionsPaged]", e);
@@ -151,12 +294,19 @@ export const getGroupTransactionsPaged = async (
 	groupId: number,
 	page: number,
 	limit: number,
-	filter: TxFilter
-): Promise<{ transactions: DashboardGroupTransaction[]; total: number }> => {
+	filter: TxFilter,
+	category?: string,
+	range: TxRange = "all",
+	search?: string
+): Promise<PagedTransactions> => {
 	const offset = (page - 1) * limit;
-	const cond = amountClause(filter);
+	const baseParams: unknown[] = [groupId];
+	const cond = amountClause(filter) + categoryClause(category, baseParams) + rangeClause(range) + searchClause(search, baseParams);
+	const limitIdx = baseParams.length + 1;
+	const offsetIdx = baseParams.length + 2;
+	const dataParams = [...baseParams, limit, offset];
 	try {
-		const [dataRes, countRes] = await Promise.all([
+		const [dataRes, aggRes, monthlyRes] = await Promise.all([
 			pool.query(
 				`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
 				        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four,
@@ -168,21 +318,30 @@ export const getGroupTransactionsPaged = async (
 				 JOIN users u ON u.id = t.user_id
 				 WHERE agv.group_id = $1${cond}
 				 ORDER BY t.transaction_date DESC, t.id DESC
-				 LIMIT $2 OFFSET $3`,
-				[groupId, limit, offset]
+				 LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+				dataParams
 			),
 			pool.query(
-				`SELECT COUNT(*) AS total
+				`SELECT ${TX_AGGREGATE_SELECT}
 				 FROM transactions t
 				 JOIN account_transactions akt ON t.id = akt.transaction_id
 				 JOIN account_group_visibility agv ON agv.account_id = akt.account_id
 				 WHERE agv.group_id = $1${cond}`,
-				[groupId]
+				baseParams
+			),
+			pool.query(
+				`SELECT ${TX_MONTHLY_SELECT}
+				 FROM transactions t
+				 JOIN account_transactions akt ON t.id = akt.transaction_id
+				 JOIN account_group_visibility agv ON agv.account_id = akt.account_id
+				 WHERE agv.group_id = $1${cond}${TX_MONTHLY_GROUP}`,
+				baseParams
 			),
 		]);
 		return {
 			transactions: dataRes.rows as DashboardGroupTransaction[],
-			total: Number(countRes.rows[0]?.total ?? 0),
+			...parseTxAggregate(aggRes.rows[0]),
+			monthly: parseMonthlyBuckets(monthlyRes.rows),
 		};
 	} catch (e) {
 		console.error("[getGroupTransactionsPaged]", e);
@@ -202,12 +361,19 @@ export const getMemberTransactionsPaged = async (
 	memberId: number,
 	page: number,
 	limit: number,
-	filter: TxFilter
-): Promise<{ transactions: DashboardGroupTransaction[]; total: number }> => {
+	filter: TxFilter,
+	category?: string,
+	range: TxRange = "all",
+	search?: string
+): Promise<PagedTransactions> => {
 	const offset = (page - 1) * limit;
-	const cond = amountClause(filter);
+	const baseParams: unknown[] = [groupId, memberId];
+	const cond = amountClause(filter) + categoryClause(category, baseParams) + rangeClause(range) + searchClause(search, baseParams);
+	const limitIdx = baseParams.length + 1;
+	const offsetIdx = baseParams.length + 2;
+	const dataParams = [...baseParams, limit, offset];
 	try {
-		const [dataRes, countRes] = await Promise.all([
+		const [dataRes, aggRes, monthlyRes] = await Promise.all([
 			pool.query(
 				`SELECT t.id, t.transaction_date, t.amount, t.description, t.category,
 				        t.merchant_name, t.entry_method, akt.account_id, a.account_name, a.institution_name, a.last_four,
@@ -219,25 +385,104 @@ export const getMemberTransactionsPaged = async (
 				 JOIN users u ON u.id = t.user_id
 				 WHERE agv.group_id = $1 AND t.user_id = $2${cond}
 				 ORDER BY t.transaction_date DESC, t.id DESC
-				 LIMIT $3 OFFSET $4`,
-				[groupId, memberId, limit, offset]
+				 LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+				dataParams
 			),
 			pool.query(
-				`SELECT COUNT(*) AS total
+				`SELECT ${TX_AGGREGATE_SELECT}
 				 FROM transactions t
 				 JOIN account_transactions akt ON t.id = akt.transaction_id
 				 JOIN account_group_visibility agv ON agv.account_id = akt.account_id
 				 WHERE agv.group_id = $1 AND t.user_id = $2${cond}`,
-				[groupId, memberId]
+				baseParams
+			),
+			pool.query(
+				`SELECT ${TX_MONTHLY_SELECT}
+				 FROM transactions t
+				 JOIN account_transactions akt ON t.id = akt.transaction_id
+				 JOIN account_group_visibility agv ON agv.account_id = akt.account_id
+				 WHERE agv.group_id = $1 AND t.user_id = $2${cond}${TX_MONTHLY_GROUP}`,
+				baseParams
 			),
 		]);
 		return {
 			transactions: dataRes.rows as DashboardGroupTransaction[],
-			total: Number(countRes.rows[0]?.total ?? 0),
+			...parseTxAggregate(aggRes.rows[0]),
+			monthly: parseMonthlyBuckets(monthlyRes.rows),
 		};
 	} catch (e) {
 		console.error("[getMemberTransactionsPaged]", e);
 		throw new DatabaseError("Failed to fetch member transactions (paged)", {
+			groupId,
+			memberId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
+// Returns the distinct set of categories present across the requesting user's
+// own transactions, alphabetically sorted, with uncategorized rows surfaced as
+// "Other". Powers the category-filter dropdown on the transaction list so the
+// menu only ever offers categories that actually match something.
+export const getMyTransactionCategories = async (userId: number): Promise<string[]> => {
+	try {
+		const res = await pool.query(
+			`SELECT DISTINCT COALESCE(t.category, 'Other') AS category
+			 FROM transactions t
+			 WHERE t.user_id = $1
+			 ORDER BY category ASC`,
+			[userId]
+		);
+		return res.rows.map((r) => r.category as string);
+	} catch (e) {
+		throw new DatabaseError("Failed to fetch user transaction categories", {
+			userId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
+// Distinct categories across all transactions visible to the group (scoped via
+// account_group_visibility). Mirrors getMyTransactionCategories for the group view.
+export const getGroupTransactionCategories = async (groupId: number): Promise<string[]> => {
+	try {
+		const res = await pool.query(
+			`SELECT DISTINCT COALESCE(t.category, 'Other') AS category
+			 FROM transactions t
+			 JOIN account_transactions akt ON t.id = akt.transaction_id
+			 JOIN account_group_visibility agv ON agv.account_id = akt.account_id
+			 WHERE agv.group_id = $1
+			 ORDER BY category ASC`,
+			[groupId]
+		);
+		return res.rows.map((r) => r.category as string);
+	} catch (e) {
+		throw new DatabaseError("Failed to fetch group transaction categories", {
+			groupId,
+			cause: e instanceof Error ? e.message : String(e),
+		});
+	}
+};
+
+// Distinct categories for one group member's transactions, scoped to accounts
+// shared with the group — mirrors getMemberTransactionsPaged's visibility rules.
+export const getMemberTransactionCategories = async (
+	groupId: number,
+	memberId: number
+): Promise<string[]> => {
+	try {
+		const res = await pool.query(
+			`SELECT DISTINCT COALESCE(t.category, 'Other') AS category
+			 FROM transactions t
+			 JOIN account_transactions akt ON t.id = akt.transaction_id
+			 JOIN account_group_visibility agv ON agv.account_id = akt.account_id
+			 WHERE agv.group_id = $1 AND t.user_id = $2
+			 ORDER BY category ASC`,
+			[groupId, memberId]
+		);
+		return res.rows.map((r) => r.category as string);
+	} catch (e) {
+		throw new DatabaseError("Failed to fetch member transaction categories", {
 			groupId,
 			memberId,
 			cause: e instanceof Error ? e.message : String(e),

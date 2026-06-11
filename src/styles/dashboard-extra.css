@@ -352,6 +352,10 @@
 .db-link-row:hover { border-color: var(--ink-3); }
 .db-link-row-t { font-size: 13.5px; font-weight: 500; color: var(--ink); }
 .db-link-row-d { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+/* Destructive link row (delete account) */
+.db-link-row-danger { border-color: oklch(0.85 0.07 25); }
+.db-link-row-danger:hover { border-color: oklch(0.55 0.18 25); }
+.db-link-row-danger .db-link-row-t { color: oklch(0.5 0.18 25); }
 .db-pill {
   font-size: 11px;
   padding: 3px 10px;

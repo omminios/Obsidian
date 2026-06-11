@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Obsidian Financial is a full-stack TypeScript application with two halves living in one repo:
 
-- **Frontend** (`src/`): React 19 + Vite + Tailwind 4. Currently a shell — `main.tsx` is the entry, `landing page.tsx` is a placeholder. `features/`, `hooks/`, `tests/` directories exist but are empty.
+- **Frontend** (`src/`): React 19 + Vite + Tailwind 4. `main.tsx` is the entry; the dashboard lives in `pages/Dashboard.tsx` + `features/dashboard/` (charts, tabs, modals), with the API client in `lib/api.ts`.
 - **Backend** (`node/src/`): Express 5 API server, mounted at `/api/v1`. Talks to a Supabase-hosted Postgres over the `pg` driver (no ORM — raw SQL in repository files).
 
 The two halves use different `tsconfig` files (`tsconfig.app.json` for the client, `tsconfig.server.json` for the server, `rootDir: ./node`, `outDir: ./node/dist`).
@@ -29,7 +29,7 @@ npm run test:docker  # Run vitest inside the test container against .env.test
 
 Run a single test file: `npx vitest run node/src/tests/repository/userRepository.test.ts`
 
-The test runner is configured with named projects in `vitest.config.ts` — to run one project: `npx vitest run --project users` (or `accounts`, `groups`, `transactions`, `refreshTokens`, `plaidSync`, `accountTransactions`, `refreshService`). Each project maps to exactly one test file via its `include` glob, so a new test file needs a new project entry to be picked up.
+The test runner is configured with named projects in `vitest.config.ts` — to run one project: `npx vitest run --project users` (or `accounts`, `groups`, `transactions`, `refreshTokens`, `plaidSync`, `accountTransactions`, `refreshService`, `balanceSnapshots`). Each project maps to exactly one test file via its `include` glob, so a new test file needs a new project entry to be picked up.
 
 ## Environment files
 
@@ -108,17 +108,13 @@ Integration tests run against a real local Postgres (Supabase CLI's bundled inst
 
 ### Test helpers
 
-`node/src/tests/helpers/dbHelper.ts` — `truncateAll`, `seedUser`, `seedGroup`, `seedAccount`, `seedTransaction`, `seedAccountMember`, `seedAccountTransaction`. Call `seedGroup(userId)` before `seedPlaidItem` — `exchangePublicToken` writes `account_group_visibility` rows that require a group FK.
+`node/src/tests/helpers/dbHelper.ts` — `truncateAll`, `seedUser`, `seedGroup`, `seedAccount`, `seedTransaction`, `seedAccountMember`, `seedAccountTransaction`, `seedBalanceSnapshot`, `seedAccountGroupVisibility`. Call `seedGroup(userId)` before `seedPlaidItem` — `exchangePublicToken` writes `account_group_visibility` rows that require a group FK.
 
 `node/src/tests/helpers/plaidHelper.ts` — `seedPlaidItem(userId, groupId, options?)`. Makes real Plaid sandbox API calls: creates a sandbox public token, runs the full `exchangePublicToken` service (accounts + initial transaction sync), and retries sync with backoff if transactions aren't ready yet (~8–10s per call). Guard throws if `PLAID_ENV !== "sandbox"`.
 
 ### Notable test coverage
 
-- **`refreshService.test.ts`** (project `refreshService`) — `recordRefreshTokenActivity`: slides `last_used_at`/`expires_at` forward for a valid token (passing the **raw** token, asserting it gets hashed before the row is touched), and is a no-op that neither throws nor creates a row for an unknown/garbage token (locking in the best-effort, never-500 contract).
-- **`refreshTokenRepository.test.ts`** (project `refreshTokens`) — includes a `touchRefreshToken` case asserting `last_used_at` is bumped and `expires_at` slid without revoking the token.
-- **`userRepository.test.ts`** (project `users`) — `updateUserName` cases: updates first/last and returns the row without `password_hash`, allows an empty last name (single-word display name), and returns `undefined` for a missing user.
-- **`groupRepository.test.ts`** (project `groups`) — `updateGroupName` cases. (This file also imports `findGroupById`; a stale `findById` import here previously broke the whole `groups` project's compilation.)
-- **`accountService.test.ts`** (project `accountTransactions`) — covers the manual account edit/delete service paths.
+Each repository/service has a matching `*.test.ts` (one `vitest.config.ts` project each — see that file for the list). Net-worth coverage lives in `balanceSnapshotRepository.test.ts` (project `balanceSnapshots`): `upsertAccountSnapshot` (one row per account per day, null no-op) plus the net-worth series (last-observation carry-forward + credit/loan sign).
 
 ### Plaid integration test pattern
 
@@ -169,7 +165,7 @@ Files under `node/src/services/plaid/` and `node/src/routes/V1/plaidRoutes.ts` i
    - Fetches accounts (with balances, names, mask) and institution name.
    - AES-256-GCM encrypts the `access_token` via `node/src/utils/plaidCrypto.ts`.
    - In one Postgres transaction: inserts `plaid_items`, inserts `accounts` (with Plaid's `type`/`subtype` taxonomy, normalized via `sanitizePlaidAccountType`), inserts `account_members` (`ownership_type='owner'`), inserts `account_group_visibility` for the user's current group.
-   - Outside that transaction, calls `syncTransactions` to pull the last 30 days of transactions.
+   - Outside that transaction, snapshots each account's link-time balance and calls `syncTransactions` for the initial pull (cursor `null` → full available history; see Transaction sync).
 4. Multi-bank: the frontend re-mints a fresh `link_token` (step 1) for each additional institution so Plaid Link can be re-opened. Each successful exchange runs step 3 independently.
 
 ### Transaction sync
@@ -181,6 +177,16 @@ Files under `node/src/services/plaid/` and `node/src/routes/V1/plaidRoutes.ts` i
 - **removed**: DELETE by `plaid_id` (CASCADE removes `account_transactions` rows).
 - Saves the final `next_cursor` to `plaid_items.transactions_cursor` after a successful commit, so the next sync call picks up only new deltas.
 - The cursor is `null` on first sync — Plaid returns all available history (typically ~24 months) and the 30-day window is enforced by Plaid's sandbox default, not by this code.
+
+### Sync cadence & balance refresh
+
+A `node-cron` job (`scheduledSyncService.startScheduledSync`) ticks **every 30 minutes**, but a group only syncs when **due** — `getGroupsDueForSync` returns groups where `last_synced_at IS NULL` or `last_synced_at + INTERVAL '7 hours' <= NOW()`. So the effective per-household cadence is **~7 hours**, with 30 min as the polling granularity. `claimGroupSync`/`releaseGroupSync` use the `groups.is_syncing` flag as a lock (one sync per group at a time); `resetStaleGroupLocks` clears locks older than 10 min left by a crashed run. `POST /api/v1/plaid/sync` runs the same work on demand, bypassing the 7-hour gate.
+
+Per item, each sync calls `balanceRefreshService.refreshItemBalances` (Plaid `accountsBalanceGet` → updates `accounts.balance_current`/`balance_available`) **before** `syncTransactions`. This is the only thing that refreshes balances — `syncTransactions` touches transactions only. Balance refresh is best-effort (logged, never blocks the transaction sync).
+
+### Net worth snapshots
+
+`account_balance_snapshots` (one row per account per day, `UNIQUE(account_id, snapshot_date)`) feeds the dashboard's net-worth-over-time chart. `balanceSnapshotRepository.upsertAccountSnapshot` upserts the day's row; it's called from the balance refresh, the Plaid link insert (`itemService`), and manual account create/edit (`accountService`). Net worth = assets − liabilities (credit/loan negate). `dashboardRepository.getUserNetWorthSeries`/`getGroupNetWorthSeries` build a monthly series with last-observation carry-forward; the line starts when snapshots begin (no historical backfill).
 
 ### Encryption (`node/src/utils/plaidCrypto.ts`)
 

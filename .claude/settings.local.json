@@ -32,7 +32,13 @@
       "Bash(unzip -l Obsidian.zip)",
       "Bash(node -e \"console.log\\(require\\('recharts/package.json'\\).version\\)\")",
       "Bash(sed -n '1,80p' node_modules/recharts/types/polar/Pie.d.ts)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(git stash *)",
+      "PowerShell(npx tsc -p tsconfig.server.json --noEmit; \"server exit: $LASTEXITCODE\"; npx tsc -p tsconfig.app.json --noEmit; \"app exit: $LASTEXITCODE\")",
+      "PowerShell($ports = 3000,5173,54321,54322; foreach \\($p in $ports\\) { $r = Test-NetConnection -ComputerName 127.0.0.1 -Port $p -WarningAction SilentlyContinue -InformationLevel Quiet; \"port $p listening: $r\" })",
+      "PowerShell(curl.exe -s -o NUL -w \"status=%{http_code}`n\" http://localhost:3000/api/v1/events)",
+      "PowerShell(node verify-sse.mjs)",
+      "PowerShell(Remove-Item *)"
     ]
   }
 }

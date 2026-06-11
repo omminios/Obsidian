@@ -3,7 +3,10 @@ import { authenticate } from "../../middleware/authenticate.js";
 import { authorizeMember } from "../../middleware/authorizeMember.js";
 import { validate } from "../../middleware/validate.js";
 import { AuthenticationError } from "../../errors/index.js";
-import { dashboardTxQuerySchema } from "../../schemas/dashboardSchemas.js";
+import {
+	dashboardTxQuerySchema,
+	dashboardTxCategoriesQuerySchema,
+} from "../../schemas/dashboardSchemas.js";
 import {
 	getUserDashboardInfo,
 	getGroupDashboardInfo,
@@ -21,7 +24,11 @@ import {
 	getMyTransactionsPaged,
 	getGroupTransactionsPaged,
 	getMemberTransactionsPaged,
+	getMyTransactionCategories,
+	getGroupTransactionCategories,
+	getMemberTransactionCategories,
 } from "../../repository/dashboardRepository.js";
+import type { PagedTransactions } from "../../repository/dashboardRepository.js";
 
 const router = Router();
 router.use(authenticate, authorizeMember);
@@ -148,28 +155,46 @@ router.get("/summary", async (req, res) => {
 
 const TX_PAGE_LIMIT = 25;
 
+// Shapes a paged-transactions result into the list response. `summary` carries
+// the full-set KPI aggregates (every matching transaction, not just this page) so
+// the dashboard's Money in / out / Net cards reflect the whole filtered set.
+function buildTxPageResponse(result: PagedTransactions, page: number, showOwner: boolean) {
+	return {
+		transactions: result.transactions,
+		total: result.total,
+		page,
+		pages: Math.max(1, Math.ceil(result.total / TX_PAGE_LIMIT)),
+		showOwner,
+		summary: {
+			total: result.total,
+			sumIn: result.sumIn,
+			sumOut: result.sumOut,
+			countIn: result.countIn,
+			countOut: result.countOut,
+		},
+		monthly: result.monthly,
+	};
+}
+
 // Get paginated transactions for the dashboard transaction list view.
 router.get(
 	"/transactions",
 	validate({ query: dashboardTxQuerySchema }),
 	async (req, res) => {
 		const { userId, groupId } = req.user!;
-		const { view, page, filter } = req.query as unknown as typeof dashboardTxQuerySchema._output;
+		const { view, page, filter, category, range, search } = req.query as unknown as typeof dashboardTxQuerySchema._output;
 
 		if (view === "me") {
 			const result = await getMyTransactionsPaged(
 				userId,
 				page,
 				TX_PAGE_LIMIT,
-				filter
+				filter,
+				category,
+				range,
+				search
 			);
-			res.status(200).json({
-				transactions: result.transactions,
-				total: result.total,
-				page,
-				pages: Math.max(1, Math.ceil(result.total / TX_PAGE_LIMIT)),
-				showOwner: false,
-			});
+			res.status(200).json(buildTxPageResponse(result, page, false));
 			return;
 		}
 
@@ -184,15 +209,12 @@ router.get(
 				groupId,
 				page,
 				TX_PAGE_LIMIT,
-				filter
+				filter,
+				category,
+				range,
+				search
 			);
-			res.status(200).json({
-				transactions: result.transactions,
-				total: result.total,
-				page,
-				pages: Math.max(1, Math.ceil(result.total / TX_PAGE_LIMIT)),
-				showOwner: true,
-			});
+			res.status(200).json(buildTxPageResponse(result, page, true));
 			return;
 		}
 
@@ -206,15 +228,51 @@ router.get(
 			memberId,
 			page,
 			TX_PAGE_LIMIT,
-			filter
+			filter,
+			category,
+			range,
+			search
 		);
-		res.status(200).json({
-			transactions: result.transactions,
-			total: result.total,
-			page,
-			pages: Math.max(1, Math.ceil(result.total / TX_PAGE_LIMIT)),
-			showOwner: false,
-		});
+		res.status(200).json(buildTxPageResponse(result, page, false));
+	}
+);
+
+// Returns the distinct list of categories available for the given view, used to
+// populate the transaction-list category-filter dropdown. Scoped identically to
+// the /transactions endpoint so the menu only offers categories that match rows
+// the user can actually see.
+router.get(
+	"/transactions/categories",
+	validate({ query: dashboardTxCategoriesQuerySchema }),
+	async (req, res) => {
+		const { userId, groupId } = req.user!;
+		const { view } = req.query as unknown as typeof dashboardTxCategoriesQuerySchema._output;
+
+		if (view === "me") {
+			const categories = await getMyTransactionCategories(userId);
+			res.status(200).json({ categories });
+			return;
+		}
+
+		if (!groupId) {
+			throw new AuthenticationError(
+				"No active group found. Please log in again."
+			);
+		}
+
+		if (view === "group") {
+			const categories = await getGroupTransactionCategories(groupId);
+			res.status(200).json({ categories });
+			return;
+		}
+
+		const memberId = parseInt(view.replace("member-", ""), 10);
+		if (isNaN(memberId)) {
+			res.status(400).json({ message: "Invalid view" });
+			return;
+		}
+		const categories = await getMemberTransactionCategories(groupId, memberId);
+		res.status(200).json({ categories });
 	}
 );
 

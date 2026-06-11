@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Wordmark } from "../components/Wordmark";
 import { IconBolt, IconChart, IconShield } from "../components/icons";
 import { useRouter } from "../lib/router";
-import { api, type DashboardSummary } from "../lib/api";
+import { api, subscribeToSync, type DashboardSummary } from "../lib/api";
 import {
 	buildAccountsForView,
 	buildDashboardView,
@@ -75,6 +75,17 @@ export function Dashboard() {
 			.finally(() => setLoading(false));
 	}, [loadSummary]);
 
+	// Live-refresh: when the household's Plaid sync finishes (cron or on-demand,
+	// triggered by this user or any member), the server pushes a "sync:complete"
+	// event and we refetch our own summary so balances/transactions update
+	// without a manual reload.
+	useEffect(() => {
+		const unsubscribe = subscribeToSync(() => {
+			void loadSummary();
+		});
+		return unsubscribe;
+	}, [loadSummary]);
+
 	const groupViews = useMemo(() => buildGroupViews(summary), [summary]);
 	const currentView = useMemo(() => buildDashboardView(summary, view), [summary, view]);
 	const currentAccounts = useMemo(() => buildAccountsForView(summary, view), [summary, view]);
@@ -106,6 +117,15 @@ export function Dashboard() {
 	const handleUpdateProfile = async (firstName: string, lastName: string) => {
 		await api.updateProfile(firstName, lastName);
 		await loadSummary();
+	};
+
+	// Permanently delete the account, then route home. The cookie session dies
+	// with the user server-side; a fresh load lands on the marketing page. Errors
+	// propagate to the modal so the owner-must-remove-members message is shown.
+	const handleDeleteAccount = async () => {
+		await api.deleteUser(summary.user.id);
+		setModal(null);
+		navigate("/");
 	};
 
 	if (loading) {
@@ -177,6 +197,7 @@ export function Dashboard() {
 					onChangePassword={handleChangePassword}
 					onRenameGroup={handleRenameGroup}
 					onUpdateProfile={handleUpdateProfile}
+					onDeleteAccount={handleDeleteAccount}
 					user={summary.user}
 					groupName={summary.group?.name ?? "My Household"}
 					groupViews={groupViews}

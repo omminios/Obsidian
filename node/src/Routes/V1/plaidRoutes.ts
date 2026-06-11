@@ -16,6 +16,7 @@ import {
 } from "../../repository/groupRepository.js";
 import { syncTransactions } from "../../services/plaid/transactionsSyncService.js";
 import { refreshItemBalances } from "../../services/plaid/balanceRefreshService.js";
+import { publishToGroup } from "../../services/realtime/eventBus.js";
 
 const router = Router();
 
@@ -91,6 +92,16 @@ router.post("/sync", async (req, res) => {
 	}
 
 	await releaseGroupSync(groupId);
+
+	// Notify every open dashboard in this household (including the caller's
+	// other tabs and any household members) so they refetch their own summary.
+	publishToGroup(groupId, "sync:complete", {
+		added: totalAdded,
+		modified: totalModified,
+		removed: totalRemoved,
+		at: new Date().toISOString(),
+	});
+
 	const status = await getGroupSyncStatus(groupId);
 
 	res.status(200).json({

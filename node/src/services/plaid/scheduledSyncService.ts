@@ -11,12 +11,16 @@ import {
 } from "../../repository/plaidItemRepository.js";
 import { syncTransactions } from "./transactionsSyncService.js";
 import { refreshItemBalances } from "./balanceRefreshService.js";
+import { publishToGroup } from "../realtime/eventBus.js";
 
 async function syncGroup(groupId: number): Promise<void> {
 	const claimed = await claimGroupSync(groupId);
 	if (!claimed) return; // another process beat us to it
 
 	const items = await findByGroupMembers(groupId);
+	let totalAdded = 0;
+	let totalModified = 0;
+	let totalRemoved = 0;
 	for (const item of items) {
 		try {
 			const token = getDecryptedAccessToken(item);
@@ -36,6 +40,9 @@ async function syncGroup(groupId: number): Promise<void> {
 				item.user_id,
 				item.transactions_cursor
 			);
+			totalAdded += result.added;
+			totalModified += result.modified;
+			totalRemoved += result.removed;
 			console.log(`[scheduledSync] group=${groupId} item=${item.id}`, result);
 		} catch (e) {
 			console.error(
@@ -46,6 +53,15 @@ async function syncGroup(groupId: number): Promise<void> {
 	}
 
 	await releaseGroupSync(groupId);
+
+	// Notify every open dashboard in this household so they refetch their own
+	// (per-user) summary. Best-effort — a no-op if nobody has it open.
+	publishToGroup(groupId, "sync:complete", {
+		added: totalAdded,
+		modified: totalModified,
+		removed: totalRemoved,
+		at: new Date().toISOString(),
+	});
 }
 
 export function startScheduledSync(): void {
